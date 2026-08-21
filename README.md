@@ -1,13 +1,16 @@
 # rs_discordlogs
 
-Universeel **standalone Discord logging-systeem voor FiveM**. De resource heeft geen ESX-, QBCore-, ox_lib- of andere frameworkdependency nodig.
+Universeel **standalone Discord logging-systeem voor FiveM**. Geen ESX-, QBCore-, ox_lib-, Deluxe-Core- of andere frameworkdependency nodig.
 
-`rs_discordlogs` kan automatisch per FiveM-resource een Discord-logkanaal gebruiken of aanmaken, rich embeds versturen, bestaande webhook-URL's herkennen en terugvallen op een centrale webhook wanneer de Discord Bot API niet beschikbaar is.
+`rs_discordlogs` kan automatisch per FiveM-resource een Discord-logkanaal gebruiken of aanmaken, rich embeds versturen, bestaande webhook-URL's herkennen, terugvallen op een centrale webhook en de eigen Discord bot via de Gateway zichtbaar **online** houden.
 
 ## Functies
 
 - 100% standalone FiveM-resource
-- Discord Bot API via een eigen bot-token
+- Discord Bot REST API via eigen bot-token
+- Discord Gateway verbinding met online status
+- Automatische Gateway heartbeat, reconnect en session resume
+- Geen `discord.js`, npm-installatie of apart botproces nodig
 - Automatische Discord category
 - Automatisch één logkanaal per resource
 - Handmatige kanaal-overrides
@@ -19,7 +22,7 @@ Universeel **standalone Discord logging-systeem voor FiveM**. De resource heeft 
 - Centrale webhook fallback
 - Rate-limit retry voor de Discord API
 - Server-only loggingevent tegen client spoofing
-- Test- en scancommands
+- Test-, scan-, status- en Gateway commands
 - Optionele resource-, connect- en disconnectlogs
 - Compatibel met ESX, QBCore, Qbox en standalone scripts
 
@@ -32,7 +35,7 @@ Universeel **standalone Discord logging-systeem voor FiveM**. De resource heeft 
 ensure rs_discordlogs
 ```
 
-3. Maak een Discord bot aan via de Discord Developer Portal.
+3. Maak een bot aan via de Discord Developer Portal.
 4. Voeg de bot toe aan je Discord-server.
 5. Geef de bot minimaal:
    - View Channels
@@ -40,9 +43,11 @@ ensure rs_discordlogs
    - Send Messages
    - Embed Links
    - Read Message History
-6. Vul je `GuildId` en bot-token in.
+6. Vul de Discord Server ID (`GuildId`) en bot-token in.
 
-### Aanbevolen: token via server.cfg
+De resource gebruikt server-side **Node.js 22** voor de Discord Gateway. Dit staat al ingesteld in `fxmanifest.lua`; er is geen losse Node-server of npm package nodig.
+
+## Aanbevolen configuratie via server.cfg
 
 Zet secrets liever niet in een bestand dat je naar GitHub pusht:
 
@@ -50,13 +55,26 @@ Zet secrets liever niet in een bestand dat je naar GitHub pusht:
 set rs_discordlogs_token "JOUW_DISCORD_BOT_TOKEN"
 set rs_discordlogs_guild "JOUW_DISCORD_SERVER_ID"
 set rs_discordlogs_webhook "OPTIONELE_CENTRALE_WEBHOOK"
+
+ensure rs_discordlogs
 ```
 
-De convars hebben voorrang op de waarden in `config.lua`.
+De convars hebben voorrang op waarden in `config.lua`.
 
-### Config.lua
+### Extra bescherming van de bot-token
 
-Je kunt ze ook rechtstreeks instellen:
+FiveM standard convars zijn server-only, maar standaard leesbaar door andere serverresources. Je kunt de token verder beperken:
+
+```cfg
+add_convar_permission rs_discordlogs read rs_discordlogs_token
+add_convar_permission rs_discordlogs read rs_discordlogs_gateway_token_runtime
+```
+
+Plaats die regels vóór `ensure rs_discordlogs`.
+
+## Config.lua
+
+Je kunt de waarden ook rechtstreeks instellen:
 
 ```lua
 Config.Discord = {
@@ -70,7 +88,62 @@ Config.Discord = {
 }
 ```
 
-> Push nooit een echte bot-token of webhook naar een openbare GitHub-repository.
+> Push nooit een echte bot-token of webhook naar een openbare repository.
+
+## Discord bot online status
+
+De Gateway staat standaard aan:
+
+```lua
+Config.Gateway = {
+    Enabled = true,
+    Status = 'online',
+    ActivityType = 3,
+    ActivityName = 'FiveM Logs',
+    ReconnectDelayMs = 5000,
+    Debug = false
+}
+```
+
+Activity types:
+
+```text
+0 = Playing
+2 = Listening
+3 = Watching
+5 = Competing
+```
+
+Standaard verschijnt de bot dus ongeveer als:
+
+```text
+🟢 RS Discord Logs
+Watching FiveM Logs
+```
+
+De Gateway gebruikt geen privileged intents; voor alleen aanwezigheid/online status zijn die niet nodig.
+
+### Gateway controle
+
+Gebruik in de serverconsole:
+
+```text
+rslogs_status
+```
+
+Voorbeeld:
+
+```text
+[rs_discordlogs] Gateway status: online | bot: RS Discord Logs
+```
+
+Herstart alleen de Gatewayverbinding:
+
+```text
+rslogs_gateway_restart
+```
+
+De logging via REST/webhooks blijft los van de Gateway werken. Als de Gateway tijdelijk verbreekt, blijft `rs_discordlogs` de normale loggingroutes gebruiken.
 
 ## Routing
 
@@ -105,7 +178,7 @@ FiveM Logs
 └── #jg-advancedgarages
 ```
 
-Bestaat de category of het kanaal nog niet, dan kan `rs_discordlogs` die automatisch aanmaken.
+Bestaat de category of het kanaal nog niet, dan maakt `rs_discordlogs` die automatisch aan wanneer `AutoCreateChannels = true`.
 
 Voor overrides:
 
@@ -141,7 +214,7 @@ exports['rs_discordlogs']:Log({
 })
 ```
 
-De aanroepende resource wordt automatisch herkend. Je hoeft dus niet zelf `jg-advancedgarages`, `rs-bikemechanic`, enz. mee te sturen.
+De aanroepende resource wordt automatisch herkend.
 
 ### Compacte export
 
@@ -159,8 +232,6 @@ exports['rs_discordlogs']:SendLog(
 
 ## Server-only event
 
-Een resource kan ook lokaal op de server een event triggeren:
-
 ```lua
 TriggerEvent('rs_discordlogs:log', {
     type = 'admin',
@@ -170,7 +241,7 @@ TriggerEvent('rs_discordlogs:log', {
 })
 ```
 
-Dit event is bewust **niet** als netwerk-event geregistreerd. Clients kunnen het daardoor niet rechtstreeks als loggingevent misbruiken.
+Dit event is bewust **niet** als netwerk-event geregistreerd. Clients kunnen het daardoor niet rechtstreeks spoofen.
 
 ## Logtypes en kleuren
 
@@ -186,51 +257,30 @@ admin
 money
 ```
 
-Je kunt de kleuren wijzigen in:
-
-```lua
-Config.Embed.Colors
-```
-
-Of per log:
-
-```lua
-exports['rs_discordlogs']:Log({
-    title = 'Custom log',
-    color = 16711680
-})
-```
+Je kunt kleuren wijzigen via `Config.Embed.Colors` of per log een `color` meegeven.
 
 ## Automatische scanner
 
-De scanner controleert gestarte resources op veelgebruikte server/configbestanden.
-
-Hij kan herkennen:
+De scanner controleert gestarte resources op veelgebruikte server/configbestanden en kan herkennen:
 
 - Discord webhook-URL's
 - `server_export`
 - runtime Lua `exports('Naam', ...)`
 - bekende loggingexportnamen zoals `SendLog`, `DiscordLog`, `CreateLog` en `WebhookLog`
 
-Voorbeeld console bij `Config.Debug = true`:
+Bij `Config.Debug = true` kan bijvoorbeeld verschijnen:
 
 ```text
 [rs_discordlogs] [DEBUG] jg-advancedgarages: webhook=ja, logging exports=SendLog, bestanden=4
 ```
 
-De volledige webhook-URL wordt nooit naar de console geschreven.
+De volledige webhook-URL wordt niet naar de console geschreven.
 
-### Belangrijke beperking
+### Beperking van willekeurige exports
 
-FiveM biedt geen veilige universele manier om de betekenis/signature van iedere willekeurige export uit ieder third-party script automatisch te bepalen.
-
-Daarom **roept `rs_discordlogs` onbekende gevonden exports niet blind aan**. De scanner gebruikt de informatie voor detectie, maar willekeurige third-party acties moeten via de universele `rs_discordlogs` export/event worden gekoppeld.
-
-Dit voorkomt dat een export met dezelfde naam maar andere parameters onverwacht fouten of side-effects veroorzaakt.
+FiveM biedt geen veilige universele manier om de signature van iedere third-party export automatisch te bepalen. Daarom worden onbekende gevonden exports **niet blind uitgevoerd**. Gebruik daarvoor de universele `rs_discordlogs` export/event of een specifieke adapter.
 
 ## Resource-specifieke webhooks
-
-Handmatig:
 
 ```lua
 Config.Routing.ResourceWebhooks = {
@@ -240,15 +290,15 @@ Config.Routing.ResourceWebhooks = {
 
 Of laat de scanner een bestaande webhook herkennen.
 
-## Fallback
+## Centrale webhook fallback
 
-Wanneer de bot-token ontbreekt, Discord niet bereikbaar is of kanaalbeheer mislukt, probeert de logger de volgende route uit `Config.Routing.Priority`.
-
-Een centrale webhook stel je in met:
+Maak in Discord een webhook voor bijvoorbeeld `#algemene-logs` en stel hem in:
 
 ```cfg
 set rs_discordlogs_webhook "https://discord.com/api/webhooks/..."
 ```
+
+Wanneer de botroute mislukt, kan deze centrale webhook als laatste fallback worden gebruikt.
 
 ## Automatische logs
 
@@ -262,22 +312,22 @@ Config.AutomaticLogs = {
 }
 ```
 
-Zet ze naar wens op `true`.
-
 ## Commands
-
-Console of ACE-gerechtigde gebruiker:
 
 ```text
 rslogs_test
 rslogs_scan
+rslogs_status
+rslogs_gateway_restart
 ```
 
-Voor ingame gebruik kun je bijvoorbeeld ACE toevoegen:
+Voor ingame gebruik kun je ACE toevoegen:
 
 ```cfg
 add_ace group.admin command.rslogs_test allow
 add_ace group.admin command.rslogs_scan allow
+add_ace group.admin command.rslogs_status allow
+add_ace group.admin command.rslogs_gateway_restart allow
 ```
 
 ## Exports
@@ -288,11 +338,12 @@ exports['rs_discordlogs']:SendLog(type, title, description, fields, source)
 exports['rs_discordlogs']:LogForResource(resourceName, payload)
 exports['rs_discordlogs']:GetResourceInfo(resourceName)
 exports['rs_discordlogs']:RescanResource(resourceName)
+exports['rs_discordlogs']:GetGatewayStatus()
 ```
 
 ## Startvolgorde
 
-Zet `rs_discordlogs` bij voorkeur vóór scripts die de export gebruiken:
+Zet `rs_discordlogs` vóór scripts die de export gebruiken:
 
 ```cfg
 ensure rs_discordlogs
@@ -304,10 +355,12 @@ ensure [rs]
 
 - Commit nooit een echte bot-token.
 - Gebruik bij voorkeur server convars.
+- Beperk token-convars met `add_convar_permission` als je third-party serverresources niet volledig vertrouwt.
 - Geef de Discord bot alleen de permissions die nodig zijn.
 - Gebruik loggingexports alleen server-side.
 - Laat clients niet zelf resource- of logkanaalnamen bepalen.
 - De ingebouwde loggingevent is server-only.
+- De Gateway gebruikt `intents: 0`; privileged intents hoeven niet aan.
 
 ## Licentie
 
