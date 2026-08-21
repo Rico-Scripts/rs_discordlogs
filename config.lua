@@ -32,6 +32,26 @@ Config.Discord = {
     MentionRoleOnError = false
 }
 
+-- Houdt de Discord bot zichtbaar online via de Discord Gateway.
+-- Dit gebruikt dezelfde bot-token als Config.Discord / rs_discordlogs_token.
+Config.Gateway = {
+    Enabled = true,
+
+    -- Discord status: online, idle, dnd of invisible.
+    Status = 'online',
+
+    -- Discord activity types:
+    -- 0 = Playing, 2 = Listening, 3 = Watching, 5 = Competing.
+    ActivityType = 3,
+    ActivityName = 'FiveM Logs',
+
+    -- Basispauze bij een verbroken Gateway-verbinding.
+    ReconnectDelayMs = 5000,
+
+    -- Extra Gateway consolemeldingen.
+    Debug = false
+}
+
 Config.Routing = {
     -- Ondersteunde routes: 'bot', 'resource_webhook', 'central_webhook'
     -- De eerst werkende route wordt gebruikt.
