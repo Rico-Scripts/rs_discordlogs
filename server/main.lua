@@ -2,6 +2,27 @@ RSDiscordLogs = RSDiscordLogs or {}
 
 local RESOURCE_NAME = GetCurrentResourceName()
 
+local function syncGatewayRuntimeConfig()
+    local gateway = Config.Gateway or {}
+    local token = RSDiscordLogs.GetSecret(
+        Config.Discord.BotToken,
+        Config.Discord.TokenConvar
+    )
+
+    -- De Node.js Gateway draait binnen dezelfde resource. Deze server-only
+    -- runtime convars delen de Lua-config met de JS-runtime zonder de token
+    -- naar clients te repliceren.
+    SetConvar('rs_discordlogs_gateway_token_runtime', token or '')
+    SetConvar('rs_discordlogs_gateway_enabled_runtime', gateway.Enabled == false and '0' or '1')
+    SetConvar('rs_discordlogs_gateway_status_runtime', tostring(gateway.Status or 'online'))
+    SetConvar('rs_discordlogs_gateway_activity_type_runtime', tostring(gateway.ActivityType or 3))
+    SetConvar('rs_discordlogs_gateway_activity_runtime', tostring(gateway.ActivityName or 'FiveM Logs'))
+    SetConvar('rs_discordlogs_gateway_reconnect_delay_runtime', tostring(gateway.ReconnectDelayMs or 5000))
+    SetConvar('rs_discordlogs_gateway_debug_runtime', gateway.Debug == true and '1' or '0')
+end
+
+syncGatewayRuntimeConfig()
+
 local function resolveCallingResource(explicitResource)
     if explicitResource and explicitResource ~= '' then
         return tostring(explicitResource)
@@ -74,6 +95,13 @@ exports('RescanResource', function(resourceName)
     return RSDiscordLogs.CopyTable(RSDiscordLogs.ScanResource(resourceName))
 end)
 
+exports('GetGatewayStatus', function()
+    return {
+        state = GetConvar('rs_discordlogs_gateway_state', 'starting'),
+        user = GetConvar('rs_discordlogs_gateway_user', '')
+    }
+end)
+
 -- Server-only event. Er wordt bewust geen RegisterNetEvent gebruikt zodat
 -- clients niet rechtstreeks loggingevents kunnen spoofen.
 AddEventHandler('rs_discordlogs:log', function(payload, resourceName)
@@ -100,6 +128,22 @@ RegisterCommand('rslogs_scan', function()
     RSDiscordLogs.ScanAllResources()
 end, true)
 
+RegisterCommand('rslogs_status', function()
+    local state = GetConvar('rs_discordlogs_gateway_state', 'starting')
+    local botUser = GetConvar('rs_discordlogs_gateway_user', '')
+
+    print(('[rs_discordlogs] Gateway status: %s%s'):format(
+        state,
+        botUser ~= '' and (' | bot: ' .. botUser) or ''
+    ))
+end, true)
+
+RegisterCommand('rslogs_gateway_restart', function()
+    syncGatewayRuntimeConfig()
+    TriggerEvent('rs_discordlogs:gateway:restart')
+    print('[rs_discordlogs] Discord Gateway restart aangevraagd.')
+end, true)
+
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName == RESOURCE_NAME then
         return
@@ -122,6 +166,7 @@ end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName == RESOURCE_NAME then
+        SetConvar('rs_discordlogs_gateway_token_runtime', '')
         return
     end
 
