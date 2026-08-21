@@ -16,8 +16,9 @@ let heartbeatAcked = true;
 let stopping = false;
 let connecting = false;
 let forcedResume = null;
+let botUserName = '';
 
-function getRuntimeConfig() {
+function readRuntimeConfig() {
     const status = GetConvar('rs_discordlogs_gateway_status_runtime', 'online');
     const activityType = Number.parseInt(GetConvar('rs_discordlogs_gateway_activity_type_runtime', '3'), 10);
     const reconnectDelay = Number.parseInt(GetConvar('rs_discordlogs_gateway_reconnect_delay_runtime', '5000'), 10);
@@ -33,12 +34,19 @@ function getRuntimeConfig() {
     };
 }
 
+let runtimeConfig = readRuntimeConfig();
+
+function refreshRuntimeConfig() {
+    runtimeConfig = readRuntimeConfig();
+    return runtimeConfig;
+}
+
 function info(message) {
     console.log(`[rs_discordlogs] [Gateway] ${message}`);
 }
 
 function debug(message) {
-    if (getRuntimeConfig().debug) {
+    if (runtimeConfig.debug) {
         console.log(`[rs_discordlogs] [Gateway DEBUG] ${message}`);
     }
 }
@@ -121,20 +129,19 @@ function startHeartbeat(interval) {
 }
 
 function identify() {
-    const config = getRuntimeConfig();
     const activities = [];
 
-    if (config.activityName && config.activityName.trim() !== '') {
+    if (runtimeConfig.activityName && runtimeConfig.activityName.trim() !== '') {
         activities.push({
-            name: config.activityName.trim(),
-            type: config.activityType
+            name: runtimeConfig.activityName.trim(),
+            type: runtimeConfig.activityType
         });
     }
 
     send({
         op: 2,
         d: {
-            token: config.token,
+            token: runtimeConfig.token,
             intents: 0,
             properties: {
                 os: process.platform,
@@ -144,7 +151,7 @@ function identify() {
             presence: {
                 since: null,
                 activities,
-                status: config.status,
+                status: runtimeConfig.status,
                 afk: false
             }
         }
@@ -154,8 +161,6 @@ function identify() {
 }
 
 function resume() {
-    const config = getRuntimeConfig();
-
     if (!sessionId || sequence === null) {
         identify();
         return;
@@ -164,7 +169,7 @@ function resume() {
     send({
         op: 6,
         d: {
-            token: config.token,
+            token: runtimeConfig.token,
             session_id: sessionId,
             seq: sequence
         }
@@ -185,10 +190,9 @@ function scheduleConnect(canResume, delay) {
     }
 
     clearReconnect();
-    const config = getRuntimeConfig();
-    const waitMs = Math.max(1000, delay || config.reconnectDelay);
+    const waitMs = Math.max(1000, delay || runtimeConfig.reconnectDelay);
 
-    publishState('reconnecting');
+    publishState('reconnecting', botUserName);
     reconnectTimer = setTimeout(() => connect(canResume), waitMs);
 }
 
@@ -216,11 +220,10 @@ function requestReconnect(canResume, delay) {
 }
 
 async function fetchGatewayBot() {
-    const config = getRuntimeConfig();
     const response = await fetch(GATEWAY_BOT_URL, {
         method: 'GET',
         headers: {
-            Authorization: `Bot ${config.token}`,
+            Authorization: `Bot ${runtimeConfig.token}`,
             'User-Agent': 'rs_discordlogs/1.1.0'
         }
     });
@@ -251,23 +254,27 @@ async function connect(canResume = true) {
         return;
     }
 
-    const config = getRuntimeConfig();
-
-    if (!config.enabled) {
+    if (!runtimeConfig.enabled) {
         publishState('disabled');
         debug('Gateway is uitgeschakeld in config.');
         return;
     }
 
-    if (!config.token) {
+    if (!runtimeConfig.token) {
         publishState('missing_token');
         warn('Geen bot-token gevonden; Gateway kan niet online komen.');
         return;
     }
 
+    if (typeof WebSocket === 'undefined' || typeof fetch === 'undefined') {
+        publishState('unsupported_runtime');
+        warn('Node.js runtime mist WebSocket/fetch. Controleer of FXServer Node.js 22 ondersteunt.');
+        return;
+    }
+
     connecting = true;
     clearReconnect();
-    publishState('connecting');
+    publishState('connecting', botUserName);
 
     try {
         let url = canResume && resumeGatewayUrl ? resumeGatewayUrl : baseGatewayUrl;
@@ -305,14 +312,14 @@ async function connect(canResume = true) {
                     if (payload.t === 'READY') {
                         sessionId = payload.d.session_id;
                         resumeGatewayUrl = payload.d.resume_gateway_url;
-                        const botUser = payload.d.user
+                        botUserName = payload.d.user
                             ? `${payload.d.user.username || 'Bot'}${payload.d.user.discriminator && payload.d.user.discriminator !== '0' ? `#${payload.d.user.discriminator}` : ''}`
                             : 'Discord bot';
 
-                        publishState('online', botUser);
-                        info(`${botUser} is online en verbonden met Discord.`);
+                        publishState('online', botUserName);
+                        info(`${botUserName} is online en verbonden met Discord.`);
                     } else if (payload.t === 'RESUMED') {
-                        publishState('online', GetConvar('rs_discordlogs_gateway_user', 'Discord bot'));
+                        publishState('online', botUserName || 'Discord bot');
                         info('Discord Gateway sessie succesvol hervat.');
                     }
                     break;
@@ -380,7 +387,7 @@ async function connect(canResume = true) {
             clearHeartbeat();
 
             if (stopping) {
-                publishState('offline');
+                publishState('offline', botUserName);
                 return;
             }
 
@@ -389,7 +396,7 @@ async function connect(canResume = true) {
             const nonResumableCodes = new Set([1000, 1001, 4007, 4009]);
 
             if (fatalCodes.has(code)) {
-                publishState('error');
+                publishState('error', botUserName);
                 warn(`Gateway gesloten met fatale Discord-code ${code}. Controleer token/intents/config.`);
                 return;
             }
@@ -406,21 +413,22 @@ async function connect(canResume = true) {
                 resetSession();
             }
 
-            const delay = code === 4008 ? Math.max(10000, getRuntimeConfig().reconnectDelay) : getRuntimeConfig().reconnectDelay;
+            const delay = code === 4008 ? Math.max(10000, runtimeConfig.reconnectDelay) : runtimeConfig.reconnectDelay;
             debug(`Gateway gesloten (code=${code}); reconnect in ${delay}ms, resume=${canResumeNext}.`);
             scheduleConnect(canResumeNext, delay);
         };
     } catch (error) {
         connecting = false;
-        publishState('error');
+        publishState('error', botUserName);
 
-        const retryAfter = Number(error.retryAfter) || getRuntimeConfig().reconnectDelay;
+        const retryAfter = Number(error.retryAfter) || runtimeConfig.reconnectDelay;
         warn(`${error.message || error} Nieuwe poging volgt automatisch.`);
         scheduleConnect(false, retryAfter);
     }
 }
 
 on('rs_discordlogs:gateway:restart', () => {
+    refreshRuntimeConfig();
     debug('Gateway restart aangevraagd.');
     forcedResume = false;
     resetSession();
