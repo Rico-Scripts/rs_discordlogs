@@ -9,9 +9,6 @@ local function syncGatewayRuntimeConfig()
         Config.Discord.TokenConvar
     )
 
-    -- De Node.js Gateway draait binnen dezelfde resource. Deze server-only
-    -- runtime convars delen de Lua-config met de JS-runtime zonder de token
-    -- naar clients te repliceren.
     SetConvar('rs_discordlogs_gateway_token_runtime', token or '')
     SetConvar('rs_discordlogs_gateway_enabled_runtime', gateway.Enabled == false and '0' or '1')
     SetConvar('rs_discordlogs_gateway_status_runtime', tostring(gateway.Status or 'online'))
@@ -53,6 +50,73 @@ local function handleLog(resourceName, payload, callback)
     payload = normalizePayload(payload)
 
     RSDiscordLogs.Send(resourceName, payload, callback)
+end
+
+local function detectedLoggingInfo(info)
+    if type(info) ~= 'table' then
+        return false
+    end
+
+    return info.webhook ~= nil
+        or (type(info.exports) == 'table' and #info.exports > 0)
+end
+
+local function detectedResources()
+    local resources = {}
+
+    for resourceName, info in pairs(RSDiscordLogs.ResourceInfo or {}) do
+        if detectedLoggingInfo(info) then
+            resources[#resources + 1] = resourceName
+        end
+    end
+
+    table.sort(resources)
+    return resources
+end
+
+local function confirmationPayload(resourceName, info)
+    local exportsText = 'Geen'
+
+    if type(info.exports) == 'table' and #info.exports > 0 then
+        exportsText = table.concat(info.exports, ', ')
+    end
+
+    return {
+        type = 'success',
+        title = 'Logging gevonden en kanaal bevestigd',
+        description = ('De centrale FiveM logger heeft logging voor `%s` gevonden. Dit kanaal is aangemaakt of gecontroleerd en is klaar voor logs.'):format(resourceName),
+        fields = {
+            {
+                name = 'Webhook gedetecteerd',
+                value = info.webhook and 'Ja' or 'Nee',
+                inline = true
+            },
+            {
+                name = 'Logging exports',
+                value = exportsText,
+                inline = false
+            },
+            {
+                name = 'Route',
+                value = 'Centrale bot / rs_discordlogs',
+                inline = false
+            }
+        }
+    }
+end
+
+local function testDetectedResource(resourceName, callback)
+    callback = callback or function() end
+
+    local info = RSDiscordLogs.ScanResource(resourceName)
+    if not info then
+        callback(false, 'resource_not_started_or_ignored')
+        return
+    end
+
+    handleLog(resourceName, confirmationPayload(resourceName, info), function(success, result)
+        callback(success, result, info)
+    end)
 end
 
 exports('Log', function(payload)
@@ -102,8 +166,6 @@ exports('GetGatewayStatus', function()
     }
 end)
 
--- Server-only event. Er wordt bewust geen RegisterNetEvent gebruikt zodat
--- clients niet rechtstreeks loggingevents kunnen spoofen.
 AddEventHandler('rs_discordlogs:log', function(payload, resourceName)
     handleLog(resourceName, payload)
 end)
@@ -126,6 +188,64 @@ end, true)
 
 RegisterCommand('rslogs_scan', function()
     RSDiscordLogs.ScanAllResources()
+end, true)
+
+RegisterCommand('rslogs_test_webhooks', function()
+    RSDiscordLogs.ScanAllResources()
+
+    local resources = detectedResources()
+    if #resources == 0 then
+        print('[rs_discordlogs] Geen resources met gevonden webhook/logging-export om te testen.')
+        return
+    end
+
+    print(('[rs_discordlogs] Test gestart voor %s resource(s). Kanalen worden automatisch aangemaakt/gecontroleerd.'):format(#resources))
+
+    local index = 1
+    local successes = 0
+    local failures = 0
+
+    local function nextResource()
+        local resourceName = resources[index]
+        if not resourceName then
+            print(('[rs_discordlogs] Test klaar: %s OK, %s fout.'):format(successes, failures))
+            return
+        end
+
+        index = index + 1
+
+        testDetectedResource(resourceName, function(success, result)
+            if success then
+                successes = successes + 1
+                print(('[rs_discordlogs] [OK] %s -> kanaal bevestigd via %s'):format(resourceName, tostring(result)))
+            else
+                failures = failures + 1
+                print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
+            end
+
+            SetTimeout(250, nextResource)
+        end)
+    end
+
+    nextResource()
+end, true)
+
+RegisterCommand('rslogs_test_resource', function(_, args)
+    local resourceName = args and args[1] or nil
+
+    if not resourceName or resourceName == '' then
+        print('[rs_discordlogs] Gebruik: rslogs_test_resource <resource>')
+        return
+    end
+
+    testDetectedResource(resourceName, function(success, result, info)
+        if success then
+            local found = info and detectedLoggingInfo(info) and 'logging gevonden' or 'geen logging-signaal gevonden'
+            print(('[rs_discordlogs] [OK] %s -> kanaal bevestigd via %s (%s).'):format(resourceName, tostring(result), found))
+        else
+            print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
+        end
+    end)
 end, true)
 
 RegisterCommand('rslogs_status', function()
