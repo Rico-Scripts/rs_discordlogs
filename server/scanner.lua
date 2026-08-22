@@ -1,6 +1,8 @@
 RSDiscordLogs = RSDiscordLogs or {}
 RSDiscordLogs.ResourceInfo = RSDiscordLogs.ResourceInfo or {}
 
+local BRIDGE_PATH = '@rs_discordlogs/server/intercept.lua'
+
 local function uniqueInsert(list, lookup, value)
     if not value or value == '' or lookup[value] then
         return
@@ -57,6 +59,31 @@ local function scanWebhook(content)
         or content:match('(https://discordapp%.com/api/webhooks/%d+/[%w%-%._]+)')
 end
 
+local function scanWebhookCode(content)
+    local lower = content:lower()
+
+    if lower:find('discord.com/api/webhooks', 1, true)
+        or lower:find('discordapp.com/api/webhooks', 1, true)
+    then
+        return true
+    end
+
+    if lower:find('performhttprequest', 1, true)
+        and lower:find('webhook', 1, true)
+    then
+        return true
+    end
+
+    return lower:find('webhookconvar', 1, true) ~= nil
+        or lower:find('config.webhook', 1, true) ~= nil
+        or lower:find('webhookurl', 1, true) ~= nil
+        or lower:find('webhook_url', 1, true) ~= nil
+end
+
+local function scanBridge(content)
+    return content:find(BRIDGE_PATH, 1, true) ~= nil
+end
+
 local function scanLoggingExports(content, foundExports, exportLookup)
     if not Config.Scanner.DetectLoggingExports then
         return
@@ -109,6 +136,8 @@ function RSDiscordLogs.ScanResource(resourceName)
     local result = {
         resource = resourceName,
         webhook = nil,
+        webhookCode = false,
+        bridge = false,
         exports = {},
         scannedFiles = 0
     }
@@ -126,6 +155,14 @@ function RSDiscordLogs.ScanResource(resourceName)
                 result.webhook = scanWebhook(content)
             end
 
+            if not result.webhookCode and scanWebhookCode(content) then
+                result.webhookCode = true
+            end
+
+            if not result.bridge and scanBridge(content) then
+                result.bridge = true
+            end
+
             scanLoggingExports(content, result.exports, exportLookup)
         end
     end
@@ -136,18 +173,24 @@ function RSDiscordLogs.ScanResource(resourceName)
     if configuredWebhook and configuredWebhook ~= '' then
         result.webhook = configuredWebhook
         result.webhookSource = 'config'
+        result.webhookCode = true
     elseif result.webhook then
         result.webhookSource = 'scanner'
     end
 
+    result.loggingDetected = result.webhook ~= nil
+        or result.webhookCode
+        or result.bridge
+        or #result.exports > 0
+
     RSDiscordLogs.ResourceInfo[resourceName] = result
 
     if Config.Debug then
-        local webhookText = result.webhook and 'gevonden' or 'geen'
+        local webhookText = result.webhook and 'url' or (result.webhookCode and 'code' or 'geen')
         local exportText = #result.exports > 0 and table.concat(result.exports, ', ') or 'geen'
 
-        RSDiscordLogs.Debug(('%s: webhook=%s, logging exports=%s, bestanden=%s')
-            :format(resourceName, webhookText, exportText, result.scannedFiles))
+        RSDiscordLogs.Debug(('%s: webhook=%s, bridge=%s, logging exports=%s, bestanden=%s')
+            :format(resourceName, webhookText, result.bridge and 'ja' or 'nee', exportText, result.scannedFiles))
     end
 
     return result
@@ -158,6 +201,8 @@ function RSDiscordLogs.ScanAllResources()
         return {
             scanned = 0,
             webhooks = 0,
+            webhookCode = 0,
+            bridges = 0,
             exports = 0
         }
     end
@@ -165,6 +210,8 @@ function RSDiscordLogs.ScanAllResources()
     local stats = {
         scanned = 0,
         webhooks = 0,
+        webhookCode = 0,
+        bridges = 0,
         exports = 0
     }
 
@@ -183,6 +230,14 @@ function RSDiscordLogs.ScanAllResources()
                     stats.webhooks = stats.webhooks + 1
                 end
 
+                if info.webhookCode then
+                    stats.webhookCode = stats.webhookCode + 1
+                end
+
+                if info.bridge then
+                    stats.bridges = stats.bridges + 1
+                end
+
                 if #info.exports > 0 then
                     stats.exports = stats.exports + 1
                 end
@@ -190,14 +245,13 @@ function RSDiscordLogs.ScanAllResources()
         end
     end
 
-    RSDiscordLogs.Info(('Scanner klaar: %s resources, %s bestaande webhook(s) gedetecteerd, %s resource(s) met logging-export(s).')
-        :format(stats.scanned, stats.webhooks, stats.exports))
+    RSDiscordLogs.Info(('Scanner klaar: %s resources, %s webhook-URL(s), %s resource(s) met webhookcode, %s bridge(s), %s resource(s) met logging-export(s).')
+        :format(stats.scanned, stats.webhooks, stats.webhookCode, stats.bridges, stats.exports))
 
     return stats
 end
 
 function RSDiscordLogs.GetResourceWebhook(resourceName)
-    -- Expliciet geconfigureerde uitzonderingen mogen altijd worden gebruikt.
     local configured = Config.Routing.ResourceWebhooks
         and Config.Routing.ResourceWebhooks[resourceName]
 
@@ -205,8 +259,6 @@ function RSDiscordLogs.GetResourceWebhook(resourceName)
         return configured
     end
 
-    -- Gescande third-party webhooks zijn standaard alleen diagnostisch. Zo is
-    -- rs_discordlogs de enige Discord-config die nodig is.
     if not Config.Routing.UseDetectedResourceWebhooks then
         return nil
     end
