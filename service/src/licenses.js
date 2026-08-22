@@ -43,7 +43,6 @@ export class LicenseStore {
     reload(force = false) {
         const stat = fs.statSync(this.filePath);
         if (!force && stat.mtimeMs <= this.mtimeMs) return;
-
         const raw = fs.readFileSync(this.filePath, 'utf8');
         this.db = normalizeDatabase(JSON.parse(raw || '{}'));
         this.mtimeMs = stat.mtimeMs;
@@ -62,11 +61,8 @@ export class LicenseStore {
         return this.db.licenses.find((entry) => entry && entry.keyHash === keyHash) || null;
     }
 
-    authenticate({ key, guildId, installId, serverName }) {
+    validateKey(key) {
         if (!key) throw new LicenseError('missing_license', 401, 'License key ontbreekt.');
-        if (!guildId) throw new LicenseError('missing_guild', 400, 'Discord guild ID ontbreekt.');
-        if (!installId) throw new LicenseError('missing_install_id', 400, 'Installatie-ID ontbreekt.');
-
         const record = this.findByKey(key);
         if (!record) throw new LicenseError('invalid_license', 401, 'Ongeldige license key.');
         if (record.enabled === false) throw new LicenseError('license_disabled', 403, 'License is uitgeschakeld.');
@@ -78,6 +74,14 @@ export class LicenseStore {
             }
         }
 
+        return record;
+    }
+
+    authenticate({ key, guildId, installId, serverName }) {
+        if (!guildId) throw new LicenseError('missing_guild', 400, 'Discord guild ID ontbreekt.');
+        if (!installId) throw new LicenseError('missing_install_id', 400, 'Installatie-ID ontbreekt.');
+
+        const record = this.validateKey(key);
         const wantedGuild = String(guildId);
         const wantedInstallHash = sha256(installId);
         let changed = false;
@@ -96,12 +100,16 @@ export class LicenseStore {
             throw new LicenseError('install_mismatch', 403, 'Deze license is aan een andere FiveM-installatie gekoppeld.');
         }
 
-        const now = new Date().toISOString();
-        record.lastSeenAt = now;
-        changed = true;
+        const nowMs = Date.now();
+        const lastSeenMs = record.lastSeenAt ? Date.parse(record.lastSeenAt) : 0;
+        if (!Number.isFinite(lastSeenMs) || nowMs - lastSeenMs >= 60_000) {
+            record.lastSeenAt = new Date(nowMs).toISOString();
+            changed = true;
+        }
 
         if (serverName && record.lastServerName !== String(serverName).slice(0, 200)) {
             record.lastServerName = String(serverName).slice(0, 200);
+            changed = true;
         }
 
         if (changed) this.save();
