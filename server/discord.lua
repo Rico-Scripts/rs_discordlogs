@@ -4,6 +4,20 @@ local INSTALL_KVP = 'rs_discordlogs:install_id'
 local STATE_CONVAR = 'rs_discordlogs_remote_state'
 local BOT_CONVAR = 'rs_discordlogs_remote_bot'
 
+local makerCache = {}
+local generalResources = {
+    ['connections'] = true,
+    ['algemeen'] = true,
+    ['resources'] = true,
+    ['server'] = true,
+    ['rs_discordlogs'] = true
+}
+
+local function trim(value)
+    value = tostring(value or '')
+    return value:match('^%s*(.-)%s*$') or ''
+end
+
 local function remoteConfig()
     return Config.Remote or {}
 end
@@ -66,6 +80,45 @@ function RSDiscordLogs.HasRemoteConfiguration()
     return apiBaseUrl() ~= '' and licenseKey() ~= '' and guildId() ~= ''
 end
 
+-- Bepaalt de maker rechtstreeks uit de metadata van het fxmanifest.lua.
+-- `author` is de standaard FiveM metadata. Voor enkele third-party resources
+-- proberen we als nette fallback ook `creator` en `developer`.
+function RSDiscordLogs.GetResourceMaker(resourceName)
+    resourceName = trim(resourceName)
+
+    if resourceName == '' or generalResources[resourceName:lower()] then
+        return ''
+    end
+
+    if makerCache[resourceName] ~= nil then
+        return makerCache[resourceName]
+    end
+
+    local maker = ''
+    local metadataKeys = { 'author', 'creator', 'developer' }
+
+    for _, metadataKey in ipairs(metadataKeys) do
+        local ok, value = pcall(GetResourceMetadata, resourceName, metadataKey, 0)
+        value = ok and trim(value) or ''
+
+        if value ~= '' then
+            maker = value
+            break
+        end
+    end
+
+    makerCache[resourceName] = maker
+    return maker
+end
+
+function RSDiscordLogs.ClearResourceMakerCache(resourceName)
+    if resourceName and resourceName ~= '' then
+        makerCache[tostring(resourceName)] = nil
+    else
+        makerCache = {}
+    end
+end
+
 local function safeDecode(body)
     return RSDiscordLogs.SafeJsonDecode(body) or {}
 end
@@ -83,7 +136,7 @@ local function request(path, method, data, callback, options, attempt)
 
     local headers = {
         ['Content-Type'] = 'application/json',
-        ['User-Agent'] = 'rs_discordlogs/3.0.0'
+        ['User-Agent'] = 'rs_discordlogs/3.1.0'
     }
 
     if options.auth ~= false then
@@ -174,11 +227,14 @@ local function preparePayload(payload)
 end
 
 local function commonBody(resourceName, payload)
+    resourceName = tostring(resourceName or 'algemeen')
+
     return {
         guildId = guildId(),
         installId = RSDiscordLogs.GetInstallId(),
         serverName = serverName(),
-        resource = tostring(resourceName or 'algemeen'),
+        resource = resourceName,
+        maker = RSDiscordLogs.GetResourceMaker(resourceName),
         payload = preparePayload(payload)
     }
 end
