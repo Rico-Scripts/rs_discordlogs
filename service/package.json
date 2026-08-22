@@ -1,0 +1,14 @@
+{
+  "name": "rs-discordlogs-official-service",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/server.js && node --check src/discord.js && node --check src/gateway.js && node --check src/licenses.js && node --check scripts/license-admin.js",
+    "license": "node scripts/license-admin.js"
+  }
+}
