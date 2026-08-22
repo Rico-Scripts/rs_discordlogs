@@ -61,6 +61,7 @@ local function confirmationPayload(resourceName, info)
     end
 
     local bridgeConnected = info.bridge == true
+    local maker = RSDiscordLogs.GetResourceMaker(resourceName)
 
     return {
         type = bridgeConnected and 'success' or 'warning',
@@ -69,6 +70,7 @@ local function confirmationPayload(resourceName, info)
             and ('De officiele Rico Scripts loggingservice heeft `%s` gevonden. Bridge en kanaal zijn klaar voor logs.'):format(resourceName)
             or ('De hosted loggingservice kan `%s` testen, maar de fxmanifest bridge is niet gedetecteerd.'):format(resourceName),
         fields = {
+            { name = 'Script maker', value = maker ~= '' and maker or 'Onbekend', inline = true },
             { name = 'Webhook URL gevonden', value = info.webhook and 'Ja' or 'Nee', inline = true },
             { name = 'Webhookcode gevonden', value = info.webhookCode and 'Ja' or 'Nee', inline = true },
             { name = 'FXManifest bridge', value = bridgeConnected and 'Ja' or 'Nee', inline = true },
@@ -163,7 +165,7 @@ RegisterCommand('rslogs_test_webhooks', function()
         return
     end
 
-    print(('[rs_discordlogs] Hosted test gestart voor %s resource(s).'):format(#resources))
+    print(('[rs_discordlogs] Hosted test gestart voor %s resource(s). Categorieen worden bepaald via fxmanifest author.'):format(#resources))
     local index, successes, warnings, failures = 1, 0, 0, 0
 
     local function nextResource()
@@ -175,12 +177,17 @@ RegisterCommand('rslogs_test_webhooks', function()
         index = index + 1
 
         testDetectedResource(resourceName, function(success, result, info)
+            local maker = RSDiscordLogs.GetResourceMaker(resourceName)
+            local makerText = maker ~= '' and maker or 'Onbekend'
+
             if success and info and info.bridge then
                 successes = successes + 1
-                print(('[rs_discordlogs] [OK] %s -> hosted kanaal + bridge bevestigd via %s'):format(resourceName, tostring(result)))
+                print(('[rs_discordlogs] [OK] %s -> maker=%s | hosted kanaal + bridge bevestigd via %s')
+                    :format(resourceName, makerText, tostring(result)))
             elseif success then
                 warnings = warnings + 1
-                print(('[rs_discordlogs] [WAARSCHUWING] %s -> hosted kanaal werkt, bridge niet gevonden.'):format(resourceName))
+                print(('[rs_discordlogs] [WAARSCHUWING] %s -> maker=%s | hosted kanaal werkt, bridge niet gevonden.')
+                    :format(resourceName, makerText))
             else
                 failures = failures + 1
                 print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
@@ -201,10 +208,12 @@ RegisterCommand('rslogs_test_resource', function(_, args)
 
     testDetectedResource(resourceName, function(success, result, info)
         if success then
-            print(('[rs_discordlogs] [OK] %s -> %s | logging=%s | webhookcode=%s | bridge=%s')
+            local maker = RSDiscordLogs.GetResourceMaker(resourceName)
+            print(('[rs_discordlogs] [OK] %s -> %s | maker=%s | logging=%s | webhookcode=%s | bridge=%s')
                 :format(
                     resourceName,
                     tostring(result),
+                    maker ~= '' and maker or 'Onbekend',
                     info and detectedLoggingInfo(info) and 'ja' or 'nee',
                     info and info.webhookCode and 'ja' or 'nee',
                     info and info.bridge and 'ja' or 'nee'
@@ -252,6 +261,8 @@ end, true)
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName == RESOURCE_NAME then return end
 
+    RSDiscordLogs.ClearResourceMakerCache(resourceName)
+
     if Config.Scanner.Enabled and Config.Scanner.ScanOnResourceStart then
         SetTimeout(250, function()
             RSDiscordLogs.ScanResource(resourceName)
@@ -279,6 +290,7 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
 
     RSDiscordLogs.ResourceInfo[resourceName] = nil
+    RSDiscordLogs.ClearResourceMakerCache(resourceName)
 end)
 
 AddEventHandler('playerConnecting', function(playerName)
