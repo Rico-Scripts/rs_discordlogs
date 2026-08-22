@@ -5,11 +5,18 @@ secrets.lua
 .env.*
 !.env.example
 
+# Hosted service secrets / runtime data
+service/data/licenses.json
+service/data/*.tmp
+
 # Runtime/cache
 data/
 cache/
 logs/
 *.log
+
+# Node
+node_modules/
 
 # Editors
 .vscode/

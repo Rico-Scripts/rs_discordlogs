@@ -3,111 +3,31 @@ Config = {}
 Config.Debug = false
 
 -- =========================================================
--- DISCORD
+-- HOSTED RICO SCRIPTS LOGGING SERVICE
 -- =========================================================
--- De centrale bot is vast. Gebruik alleen deze server.cfg convar:
---   set rs_discordlogs_token "BOT_TOKEN"
+-- Er staat bewust GEEN Discord bot-token in deze FiveM resource.
+-- Alle Discord-acties lopen via de officiele, centraal gehoste Rico Scripts bot.
 --
--- Bij de eerste succesvolle verbinding wordt het echte Discord bot-user-ID
--- lokaal vastgezet. Een token van een andere bot wordt daarna geweigerd.
--- Botnaam/avatar zijn daarom nergens als instelbare optie aanwezig.
---
--- BotToken en TokenConvar hieronder bestaan alleen voor interne/backwards
--- compatibility met de Gateway-runtime. Als de server convar is ingesteld,
--- kan hiermee niet naar een andere bot worden gewisseld; de bot-ID lock
--- controleert de identiteit alsnog.
---
--- Discord server en optionele fallback-webhook:
---   set rs_discordlogs_guild "GUILD_ID"
---   set rs_discordlogs_webhook "CENTRALE_WEBHOOK"
-Config.Discord = {
-    BotToken = '',
-    TokenConvar = 'rs_discordlogs_token',
+-- Klant/server configuratie in server.cfg:
+--   set rs_discordlogs_api_url "https://logs.jouwdomein.nl"
+--   set rs_discordlogs_license "RSLOGS_..."
+--   set rs_discordlogs_guild "DISCORD_SERVER_ID"
+Config.Remote = {
+    ApiBaseUrl = '',
+    ApiUrlConvar = 'rs_discordlogs_api_url',
+
+    LicenseKey = '',
+    LicenseConvar = 'rs_discordlogs_license',
 
     GuildId = '',
     GuildConvar = 'rs_discordlogs_guild',
 
-    GeneralChannel = 'algemene-logs',
-    ChannelPrefix = '',
-    ChannelTopic = 'Automatisch aangemaakt door de centrale FiveM logger.',
-
-    -- Alleen een nood-fallback wanneer de vaste bot/API route niet werkt.
-    CentralWebhook = '',
-    CentralWebhookConvar = 'rs_discordlogs_webhook',
-
-    AlertRoleId = '',
-    MentionRoleOnError = false
+    RetryAttempts = 3,
+    RetryDelayMs = 750
 }
 
--- =========================================================
--- AUTOMATISCHE DISCORD CATEGORIEEN
--- =========================================================
--- Kanalen worden automatisch onder de juiste categorie geplaatst. Bestaande
--- kanalen met dezelfde naam worden desgewenst naar de juiste categorie verplaatst.
-Config.Categories = {
-    Enabled = true,
-    AutoCreate = true,
-    AutoMoveExisting = true,
-
-    Default = 'Overige Logs',
-
-    -- Exacte resource overrides hebben voorrang op prefixregels.
-    Overrides = {
-        ['connections'] = 'Algemene Logs',
-        ['rs_discordlogs'] = 'Algemene Logs',
-        ['es_extended'] = 'ESX Logs',
-        ['ox_inventory'] = 'OX Logs',
-        ['ox_lib'] = 'OX Logs',
-        ['ox_target'] = 'OX Logs',
-        ['ox_doorlock'] = 'OX Logs',
-        ['oxmysql'] = 'OX Logs'
-    },
-
-    -- Prefixregels worden van boven naar beneden uitgevoerd.
-    PrefixRules = {
-        { prefix = 'rs-', category = 'RS Logs' },
-        { prefix = 'rs_', category = 'RS Logs' },
-        { prefix = 'esx_', category = 'ESX Logs' },
-        { prefix = 'es_', category = 'ESX Logs' },
-        { prefix = 'ox_', category = 'OX Logs' }
-    }
-}
-
--- =========================================================
--- BOT ONLINE STATUS
--- =========================================================
-Config.Gateway = {
-    Enabled = true,
-    Status = 'online', -- online, idle, dnd, invisible
-    ActivityType = 3,  -- 0 Playing, 2 Listening, 3 Watching, 5 Competing
-    ActivityName = 'FiveM Logs',
-    ReconnectDelayMs = 5000,
-    Debug = false
-}
-
--- =========================================================
--- ROUTING
--- =========================================================
-Config.Routing = {
-    Priority = {
-        'bot',
-        'central_webhook'
-    },
-
-    AutoCreateChannels = true,
-    UseResourceChannels = true,
-
-    UseDetectedResourceWebhooks = false,
-
-    ChannelOverrides = {
-        -- ['ox_inventory'] = 'inventory-logs',
-        -- ['es_extended'] = 'esx-logs'
-    },
-
-    ResourceWebhooks = {
-        -- ['legacy-resource'] = 'https://discord.com/api/webhooks/...'
-    }
-}
+-- De hosted service bepaalt bot-identiteit, categorieen, kanaalplaatsing en
+-- Discord permissies. Resources kunnen die centrale bot niet vervangen.
 
 -- =========================================================
 -- RESOURCE SCANNER
@@ -148,6 +68,13 @@ Config.Scanner = {
     }
 }
 
+-- Alleen nog aanwezig voor scanner/backwards compatibility. Gescande oude
+-- webhooks worden NOOIT als bestemming gebruikt in v3.
+Config.Routing = {
+    UseDetectedResourceWebhooks = false,
+    ResourceWebhooks = {}
+}
+
 -- =========================================================
 -- COMPATIBILITY
 -- =========================================================
@@ -172,23 +99,9 @@ Config.Adapters = {
 }
 
 -- =========================================================
--- EMBEDS
+-- PAYLOAD / PRIVACY
 -- =========================================================
-Config.Embed = {
-    DefaultColor = 3447003,
-
-    Colors = {
-        info = 3447003,
-        success = 5763719,
-        warning = 16776960,
-        error = 15548997,
-        security = 15158332,
-        admin = 10181046,
-        money = 15844367
-    },
-
-    Footer = 'FiveM Logs',
-    IncludeResource = true,
+Config.Payload = {
     IncludePlayerIdentifiers = true
 }
 

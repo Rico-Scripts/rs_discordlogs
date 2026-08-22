@@ -1,0 +1,23 @@
+[Unit]
+Description=Rico Scripts Official FiveM Discord Logging Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deluxe
+WorkingDirectory=/opt/rs-discordlogs/service
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3099
+EnvironmentFile=/opt/rs-discordlogs/service/.env
+ExecStart=/usr/bin/node /opt/rs-discordlogs/service/src/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/rs-discordlogs/service/data
+
+[Install]
+WantedBy=multi-user.target
