@@ -1,0 +1,29 @@
+name: Validate rs_discordlogs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check hosted service JavaScript
+        working-directory: service
+        run: npm run check
+
+      - name: Install Lua 5.4
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+
+      - name: Check Lua syntax
+        run: find . -name '*.lua' -not -path './service/*' -print0 | xargs -0 -n1 luac5.4 -p
