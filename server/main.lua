@@ -2,24 +2,6 @@ RSDiscordLogs = RSDiscordLogs or {}
 
 local RESOURCE_NAME = GetCurrentResourceName()
 
-local function syncGatewayRuntimeConfig()
-    local gateway = Config.Gateway or {}
-    local token = RSDiscordLogs.GetSecret(
-        Config.Discord.BotToken,
-        Config.Discord.TokenConvar
-    )
-
-    SetConvar('rs_discordlogs_gateway_token_runtime', token or '')
-    SetConvar('rs_discordlogs_gateway_enabled_runtime', gateway.Enabled == false and '0' or '1')
-    SetConvar('rs_discordlogs_gateway_status_runtime', tostring(gateway.Status or 'online'))
-    SetConvar('rs_discordlogs_gateway_activity_type_runtime', tostring(gateway.ActivityType or 3))
-    SetConvar('rs_discordlogs_gateway_activity_runtime', tostring(gateway.ActivityName or 'FiveM Logs'))
-    SetConvar('rs_discordlogs_gateway_reconnect_delay_runtime', tostring(gateway.ReconnectDelayMs or 5000))
-    SetConvar('rs_discordlogs_gateway_debug_runtime', gateway.Debug == true and '1' or '0')
-end
-
-syncGatewayRuntimeConfig()
-
 local function resolveCallingResource(explicitResource)
     if explicitResource and explicitResource ~= '' then
         return tostring(explicitResource)
@@ -46,10 +28,7 @@ local function normalizePayload(payload)
 end
 
 local function handleLog(resourceName, payload, callback)
-    resourceName = resolveCallingResource(resourceName)
-    payload = normalizePayload(payload)
-
-    RSDiscordLogs.Send(resourceName, payload, callback)
+    RSDiscordLogs.Send(resolveCallingResource(resourceName), normalizePayload(payload), callback)
 end
 
 local function detectedLoggingInfo(info)
@@ -57,11 +36,8 @@ local function detectedLoggingInfo(info)
         return false
     end
 
-    if info.loggingDetected == true then
-        return true
-    end
-
-    return info.webhook ~= nil
+    return info.loggingDetected == true
+        or info.webhook ~= nil
         or info.webhookCode == true
         or info.bridge == true
         or (type(info.exports) == 'table' and #info.exports > 0)
@@ -69,20 +45,17 @@ end
 
 local function detectedResources()
     local resources = {}
-
     for resourceName, info in pairs(RSDiscordLogs.ResourceInfo or {}) do
         if detectedLoggingInfo(info) then
             resources[#resources + 1] = resourceName
         end
     end
-
     table.sort(resources)
     return resources
 end
 
 local function confirmationPayload(resourceName, info)
     local exportsText = 'Geen'
-
     if type(info.exports) == 'table' and #info.exports > 0 then
         exportsText = table.concat(info.exports, ', ')
     end
@@ -93,46 +66,21 @@ local function confirmationPayload(resourceName, info)
         type = bridgeConnected and 'success' or 'warning',
         title = bridgeConnected and 'Logging gevonden en bridge bevestigd' or 'Logging gevonden - bridge controleren',
         description = bridgeConnected
-            and ('De centrale FiveM logger heeft logging voor `%s` gevonden. De fxmanifest bridge is gedetecteerd en dit kanaal is klaar voor logs.'):format(resourceName)
-            or ('De centrale FiveM logger heeft logging voor `%s` gevonden en dit kanaal werkt, maar de fxmanifest bridge is niet gedetecteerd.'):format(resourceName),
+            and ('De officiele Rico Scripts loggingservice heeft `%s` gevonden. Bridge en kanaal zijn klaar voor logs.'):format(resourceName)
+            or ('De hosted loggingservice kan `%s` testen, maar de fxmanifest bridge is niet gedetecteerd.'):format(resourceName),
         fields = {
-            {
-                name = 'Webhook URL gevonden',
-                value = info.webhook and 'Ja' or 'Nee',
-                inline = true
-            },
-            {
-                name = 'Webhookcode gevonden',
-                value = info.webhookCode and 'Ja' or 'Nee',
-                inline = true
-            },
-            {
-                name = 'FXManifest bridge',
-                value = bridgeConnected and 'Ja' or 'Nee',
-                inline = true
-            },
-            {
-                name = 'Logging exports',
-                value = exportsText,
-                inline = false
-            },
-            {
-                name = 'Benodigde regel',
-                value = '`@rs_discordlogs/server/intercept.lua`',
-                inline = false
-            },
-            {
-                name = 'Route',
-                value = 'Centrale bot / rs_discordlogs',
-                inline = false
-            }
+            { name = 'Webhook URL gevonden', value = info.webhook and 'Ja' or 'Nee', inline = true },
+            { name = 'Webhookcode gevonden', value = info.webhookCode and 'Ja' or 'Nee', inline = true },
+            { name = 'FXManifest bridge', value = bridgeConnected and 'Ja' or 'Nee', inline = true },
+            { name = 'Logging exports', value = exportsText, inline = false },
+            { name = 'Benodigde regel', value = '`@rs_discordlogs/server/intercept.lua`', inline = false },
+            { name = 'Route', value = 'Hosted API -> officiele Rico Scripts bot', inline = false }
         }
     }
 end
 
 local function testDetectedResource(resourceName, callback)
     callback = callback or function() end
-
     local info = RSDiscordLogs.ScanResource(resourceName)
     if not info then
         callback(false, 'resource_not_started_or_ignored')
@@ -157,7 +105,6 @@ exports('SendLog', function(logType, title, description, fields, playerSource)
         fields = fields,
         source = playerSource
     })
-
     return true
 end)
 
@@ -168,27 +115,23 @@ end)
 
 exports('GetResourceInfo', function(resourceName)
     resourceName = resourceName or GetInvokingResource()
-    if not resourceName then
-        return nil
-    end
-
+    if not resourceName then return nil end
     return RSDiscordLogs.CopyTable(RSDiscordLogs.ResourceInfo[resourceName])
 end)
 
 exports('RescanResource', function(resourceName)
     resourceName = resourceName or GetInvokingResource()
-    if not resourceName then
-        return nil
-    end
-
+    if not resourceName then return nil end
     return RSDiscordLogs.CopyTable(RSDiscordLogs.ScanResource(resourceName))
 end)
 
+-- Backwards-compatible naam; v3 heeft geen lokale Gateway meer.
 exports('GetGatewayStatus', function()
-    return {
-        state = GetConvar('rs_discordlogs_gateway_state', 'starting'),
-        user = GetConvar('rs_discordlogs_gateway_user', '')
-    }
+    return RSDiscordLogs.GetCachedRemoteStatus()
+end)
+
+exports('GetRemoteStatus', function()
+    return RSDiscordLogs.GetCachedRemoteStatus()
 end)
 
 AddEventHandler('rs_discordlogs:log', function(payload, resourceName)
@@ -198,15 +141,11 @@ end)
 RegisterCommand('rslogs_test', function(source)
     handleLog(RESOURCE_NAME, {
         type = 'success',
-        title = 'FiveM Discord Logs test',
-        description = 'De centrale Discord logging werkt.',
+        title = 'Rico Scripts hosted logging test',
+        description = 'De FiveM resource, hosted API en officiele Discord bot werken samen.',
         source = source > 0 and source or nil,
         fields = {
-            {
-                name = 'Status',
-                value = 'Centrale bot/API route en fallback zijn getest.',
-                inline = false
-            }
+            { name = 'Route', value = 'FiveM -> hosted API -> officiele bot', inline = false }
         }
     })
 end, true)
@@ -217,19 +156,15 @@ end, true)
 
 RegisterCommand('rslogs_test_webhooks', function()
     RSDiscordLogs.ScanAllResources()
-
     local resources = detectedResources()
+
     if #resources == 0 then
         print('[rs_discordlogs] Geen resources met webhookcode, bridge of logging-export om te testen.')
         return
     end
 
-    print(('[rs_discordlogs] Test gestart voor %s resource(s). Kanalen worden automatisch aangemaakt/gecontroleerd.'):format(#resources))
-
-    local index = 1
-    local successes = 0
-    local warnings = 0
-    local failures = 0
+    print(('[rs_discordlogs] Hosted test gestart voor %s resource(s).'):format(#resources))
+    local index, successes, warnings, failures = 1, 0, 0, 0
 
     local function nextResource()
         local resourceName = resources[index]
@@ -237,22 +172,20 @@ RegisterCommand('rslogs_test_webhooks', function()
             print(('[rs_discordlogs] Test klaar: %s OK, %s waarschuwing(en), %s fout.'):format(successes, warnings, failures))
             return
         end
-
         index = index + 1
 
         testDetectedResource(resourceName, function(success, result, info)
             if success and info and info.bridge then
                 successes = successes + 1
-                print(('[rs_discordlogs] [OK] %s -> kanaal + bridge bevestigd via %s'):format(resourceName, tostring(result)))
+                print(('[rs_discordlogs] [OK] %s -> hosted kanaal + bridge bevestigd via %s'):format(resourceName, tostring(result)))
             elseif success then
                 warnings = warnings + 1
-                print(('[rs_discordlogs] [WAARSCHUWING] %s -> kanaal werkt, maar bridge niet gevonden in fxmanifest.'):format(resourceName))
+                print(('[rs_discordlogs] [WAARSCHUWING] %s -> hosted kanaal werkt, bridge niet gevonden.'):format(resourceName))
             else
                 failures = failures + 1
                 print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
             end
-
-            SetTimeout(250, nextResource)
+            SetTimeout(300, nextResource)
         end)
     end
 
@@ -261,7 +194,6 @@ end, true)
 
 RegisterCommand('rslogs_test_resource', function(_, args)
     local resourceName = args and args[1] or nil
-
     if not resourceName or resourceName == '' then
         print('[rs_discordlogs] Gebruik: rslogs_test_resource <resource>')
         return
@@ -269,12 +201,14 @@ RegisterCommand('rslogs_test_resource', function(_, args)
 
     testDetectedResource(resourceName, function(success, result, info)
         if success then
-            local loggingFound = info and detectedLoggingInfo(info) and 'ja' or 'nee'
-            local bridge = info and info.bridge and 'ja' or 'nee'
-            local webhookCode = info and info.webhookCode and 'ja' or 'nee'
-
-            print(('[rs_discordlogs] [OK] %s -> kanaal via %s | logging=%s | webhookcode=%s | bridge=%s')
-                :format(resourceName, tostring(result), loggingFound, webhookCode, bridge))
+            print(('[rs_discordlogs] [OK] %s -> %s | logging=%s | webhookcode=%s | bridge=%s')
+                :format(
+                    resourceName,
+                    tostring(result),
+                    info and detectedLoggingInfo(info) and 'ja' or 'nee',
+                    info and info.webhookCode and 'ja' or 'nee',
+                    info and info.bridge and 'ja' or 'nee'
+                ))
         else
             print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
         end
@@ -282,25 +216,41 @@ RegisterCommand('rslogs_test_resource', function(_, args)
 end, true)
 
 RegisterCommand('rslogs_status', function()
-    local state = GetConvar('rs_discordlogs_gateway_state', 'starting')
-    local botUser = GetConvar('rs_discordlogs_gateway_user', '')
-
-    print(('[rs_discordlogs] Gateway status: %s%s'):format(
-        state,
-        botUser ~= '' and (' | bot: ' .. botUser) or ''
+    local cached = RSDiscordLogs.GetCachedRemoteStatus()
+    print(('[rs_discordlogs] Cached status: %s%s'):format(
+        cached.state or 'unknown',
+        cached.user and cached.user ~= '' and (' | bot: ' .. cached.user) or ''
     ))
+
+    RSDiscordLogs.GetRemoteStatus(function(success, data, statusCode, reason)
+        if success then
+            print(('[rs_discordlogs] Hosted API online | bot=%s | bot in guild=%s | license=%s')
+                :format(
+                    data.bot and data.bot.username or 'onbekend',
+                    data.botInGuild == false and 'nee' or 'ja',
+                    tostring(data.licenseId or 'onbekend')
+                ))
+            if data.inviteUrl then
+                print('[rs_discordlogs] Bot invite: ' .. tostring(data.inviteUrl))
+            end
+        else
+            print(('[rs_discordlogs] Hosted status mislukt (HTTP %s): %s'):format(statusCode, tostring(reason)))
+        end
+    end)
 end, true)
 
-RegisterCommand('rslogs_gateway_restart', function()
-    syncGatewayRuntimeConfig()
-    TriggerEvent('rs_discordlogs:gateway:restart')
-    print('[rs_discordlogs] Discord Gateway restart aangevraagd.')
+RegisterCommand('rslogs_invite', function()
+    RSDiscordLogs.GetInvite(function(success, data, statusCode, reason)
+        if success and data.inviteUrl then
+            print('[rs_discordlogs] Officiele Rico Scripts bot invite: ' .. tostring(data.inviteUrl))
+        else
+            print(('[rs_discordlogs] Invite ophalen mislukt (HTTP %s): %s'):format(statusCode, tostring(reason)))
+        end
+    end)
 end, true)
 
 AddEventHandler('onResourceStart', function(resourceName)
-    if resourceName == RESOURCE_NAME then
-        return
-    end
+    if resourceName == RESOURCE_NAME then return end
 
     if Config.Scanner.Enabled and Config.Scanner.ScanOnResourceStart then
         SetTimeout(250, function()
@@ -318,10 +268,7 @@ AddEventHandler('onResourceStart', function(resourceName)
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
-    if resourceName == RESOURCE_NAME then
-        SetConvar('rs_discordlogs_gateway_token_runtime', '')
-        return
-    end
+    if resourceName == RESOURCE_NAME then return end
 
     if Config.AutomaticLogs.ResourceLifecycle then
         handleLog(resourceName, {
@@ -335,53 +282,41 @@ AddEventHandler('onResourceStop', function(resourceName)
 end)
 
 AddEventHandler('playerConnecting', function(playerName)
-    if not Config.AutomaticLogs.PlayerConnecting then
-        return
-    end
-
-    local playerSource = source
-
+    if not Config.AutomaticLogs.PlayerConnecting then return end
     handleLog('connections', {
         type = 'info',
         title = 'Speler verbindt',
         description = ('%s maakt verbinding met de server.'):format(playerName or 'Onbekend'),
-        source = playerSource
+        source = source
     })
 end)
 
 AddEventHandler('playerDropped', function(reason)
-    if not Config.AutomaticLogs.PlayerDropped then
-        return
-    end
-
+    if not Config.AutomaticLogs.PlayerDropped then return end
     local playerSource = source
     local playerName = GetPlayerName(playerSource) or ('ID ' .. tostring(playerSource))
-
     handleLog('connections', {
         type = 'warning',
         title = 'Speler verlaten',
         description = ('%s heeft de server verlaten.'):format(playerName),
         source = playerSource,
         fields = {
-            {
-                name = 'Reden',
-                value = tostring(reason or 'Onbekend'),
-                inline = false
-            }
+            { name = 'Reden', value = tostring(reason or 'Onbekend'), inline = false }
         }
     })
 end)
 
 CreateThread(function()
     Wait(750)
-
-    RSDiscordLogs.Info('Centrale FiveM logger gestart.')
+    RSDiscordLogs.Info('Rico Scripts hosted FiveM logger gestart.')
 
     if Config.Scanner.Enabled and Config.Scanner.ScanOnStart then
         RSDiscordLogs.ScanAllResources()
     end
 
-    RSDiscordLogs.InitializeDiscord(function()
-        RSDiscordLogs.Debug('Initialisatie afgerond.')
+    RSDiscordLogs.InitializeDiscord(function(success)
+        if success then
+            RSDiscordLogs.Debug('Hosted initialisatie afgerond.')
+        end
     end)
 end)
