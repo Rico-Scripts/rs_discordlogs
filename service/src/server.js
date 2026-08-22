@@ -65,6 +65,10 @@ async function readJson(req) {
     }
 }
 
+function validateLicense(req) {
+    return licenseStore.validateKey(bearerToken(req));
+}
+
 function authenticate(req, data) {
     return licenseStore.authenticate({
         key: bearerToken(req),
@@ -121,7 +125,7 @@ async function route(req, res) {
 
     if (req.method === 'POST' && url.pathname === '/v1/register') {
         const data = await readJson(req);
-        const record = authenticate(req, data);
+        validateLicense(req);
         const membership = await requireBotInGuild(data.guildId, true);
         if (!membership.joined) {
             return sendJson(res, 409, {
@@ -133,6 +137,7 @@ async function route(req, res) {
             });
         }
 
+        const record = authenticate(req, data);
         await discord.ensureConfiguredCategories(String(data.guildId));
         return sendJson(res, 200, {
             ok: true,
@@ -150,28 +155,34 @@ async function route(req, res) {
             installId: url.searchParams.get('installId') || '',
             serverName: url.searchParams.get('serverName') || ''
         };
-        const record = authenticate(req, data);
+        validateLicense(req);
         const membership = await requireBotInGuild(data.guildId);
+        if (!membership.joined) {
+            return sendJson(res, 200, {
+                ok: true,
+                version: VERSION,
+                bot: publicBot(),
+                botInGuild: false,
+                inviteUrl: membership.inviteUrl,
+                guildId: String(data.guildId)
+            });
+        }
+
+        const record = authenticate(req, data);
         return sendJson(res, 200, {
             ok: true,
             version: VERSION,
             licenseId: record.id,
             bot: publicBot(),
-            botInGuild: membership.joined,
-            inviteUrl: membership.joined ? null : membership.inviteUrl,
+            botInGuild: true,
+            inviteUrl: null,
             guildId: String(data.guildId)
         });
     }
 
     if (req.method === 'POST' && (url.pathname === '/v1/log' || url.pathname === '/v1/test')) {
         const data = await readJson(req);
-        const record = authenticate(req, data);
-        if (!rateLimit(record)) {
-            return sendJson(res, 429, { ok: false, error: 'rate_limited', retryAfterMs: 60_000 });
-        }
-
-        const resource = String(data.resource || 'algemeen').slice(0, 100);
-        const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
+        validateLicense(req);
         const membership = await requireBotInGuild(data.guildId);
         if (!membership.joined) {
             return sendJson(res, 409, {
@@ -181,6 +192,14 @@ async function route(req, res) {
                 bot: publicBot()
             });
         }
+
+        const record = authenticate(req, data);
+        if (!rateLimit(record)) {
+            return sendJson(res, 429, { ok: false, error: 'rate_limited', retryAfterMs: 60_000 });
+        }
+
+        const resource = String(data.resource || 'algemeen').slice(0, 100);
+        const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
 
         if (url.pathname === '/v1/test') {
             payload.type = payload.type || 'success';
