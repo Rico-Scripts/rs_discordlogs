@@ -111,13 +111,13 @@ end)
 RegisterCommand('rslogs_test', function(source)
     handleLog(RESOURCE_NAME, {
         type = 'success',
-        title = 'RS Discord Logs test',
-        description = 'De standalone Discord logging werkt.',
+        title = 'FiveM Discord Logs test',
+        description = 'De centrale Discord logging werkt.',
         source = source > 0 and source or nil,
         fields = {
             {
                 name = 'Status',
-                value = 'Bot/API route en fallback zijn getest.',
+                value = 'Centrale bot/API route en fallback zijn getest.',
                 inline = false
             }
         }
@@ -222,7 +222,7 @@ end)
 CreateThread(function()
     Wait(750)
 
-    RSDiscordLogs.Info('Standalone resource gestart.')
+    RSDiscordLogs.Info('Centrale FiveM logger gestart.')
 
     if Config.Scanner.Enabled and Config.Scanner.ScanOnStart then
         RSDiscordLogs.ScanAllResources()

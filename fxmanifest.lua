@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'Rico-Scripts'
-description 'Universeel standalone Discord logging-systeem voor FiveM.'
-version '1.1.0'
+description 'Universeel centraal Discord logging-systeem voor FiveM.'
+version '2.0.0'
 
 lua54 'yes'
 node_version '22'
@@ -13,6 +13,8 @@ server_scripts {
     'server/utils.lua',
     'server/scanner.lua',
     'server/discord.lua',
+    'server/compat.lua',
+    'server/adapters.lua',
     'server/main.lua',
     'server/gateway.js'
 }
