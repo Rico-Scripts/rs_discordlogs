@@ -26,8 +26,11 @@ Config.Remote = {
     RetryDelayMs = 750
 }
 
--- De hosted service bepaalt bot-identiteit, categorieen, kanaalplaatsing en
--- Discord permissies. Resources kunnen die centrale bot niet vervangen.
+-- De hosted service bepaalt bot-identiteit en kanaalplaatsing.
+-- Vanaf v3.1 wordt de Discord-categorie automatisch bepaald via de `author`
+-- metadata uit het fxmanifest.lua van de resource. Er zijn dus geen vaste
+-- RS/ESX/OX categorieen meer. Scripts zonder author vallen terug op
+-- `Onbekende Scripts`; algemene serverlogs gebruiken `Algemene Logs`.
 
 -- =========================================================
 -- RESOURCE SCANNER

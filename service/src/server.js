@@ -6,7 +6,7 @@ import { GatewayPresence } from './gateway.js';
 import { LicenseError, LicenseStore } from './licenses.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '3.0.0';
+const VERSION = '3.1.0';
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Math.max(1, Math.min(65535, Number(process.env.PORT) || 3099));
 const BOT_TOKEN = String(process.env.DISCORD_BOT_TOKEN || '').trim();
@@ -199,20 +199,23 @@ async function route(req, res) {
         }
 
         const resource = String(data.resource || 'algemeen').slice(0, 100);
+        const maker = String(data.maker || '').replace(/[\r\n\t\0]/g, ' ').trim().slice(0, 100);
         const payload = data.payload && typeof data.payload === 'object' ? data.payload : {};
 
         if (url.pathname === '/v1/test') {
             payload.type = payload.type || 'success';
             payload.title = payload.title || 'Logging kanaal bevestigd';
-            payload.description = payload.description || `De officiele Rico Scripts logging bot heeft \`${resource}\` succesvol gekoppeld.`;
+            payload.description = payload.description
+                || `De officiele Rico Scripts logging bot heeft \`${resource}\` van maker \`${maker || 'Onbekend'}\` succesvol gekoppeld.`;
         }
 
-        const target = await discord.sendLog(String(data.guildId), resource, payload);
+        const target = await discord.sendLog(String(data.guildId), resource, payload, maker);
         return sendJson(res, 200, {
             ok: true,
             route: 'official_bot',
             channel: target.channelName,
             category: target.categoryName,
+            maker: maker || null,
             bot: publicBot()
         });
     }
