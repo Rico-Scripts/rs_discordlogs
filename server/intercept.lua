@@ -65,12 +65,20 @@ local function fillEmptyWebhookConfig(tbl, depth, visited, webhookContext)
     visited[tbl] = true
 
     for key, value in pairs(tbl) do
-        local keyIsWebhook = type(key) == 'string'
-            and key:lower():find('webhook', 1, true) ~= nil
+        local lowerKey = type(key) == 'string' and key:lower() or ''
+        local keyIsWebhook = lowerKey ~= '' and lowerKey:find('webhook', 1, true) ~= nil
         local insideWebhook = webhookContext == true or keyIsWebhook
 
         if type(value) == 'string' then
-            if insideWebhook and value == '' then
+            local directWebhookKey = keyIsWebhook
+                and lowerKey ~= 'webhookname'
+                and lowerKey ~= 'webhookavatar'
+                and lowerKey ~= 'webhookavatarurl'
+                and lowerKey ~= 'webhookconvar'
+            local nestedUrlKey = webhookContext == true
+                and (lowerKey == 'url' or lowerKey == 'webhookurl' or lowerKey == 'endpoint')
+
+            if value == '' and (directWebhookKey or nestedUrlKey) then
                 tbl[key] = DUMMY_WEBHOOK
             end
         elseif type(value) == 'table' then
