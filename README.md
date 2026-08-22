@@ -1,49 +1,12 @@
 # rs_discordlogs
 
-Universele **centrale Discord logger voor FiveM**. De resource is standalone en heeft geen ESX-, QBCore-, Qbox- of Deluxe-Core dependency.
+Universele centrale Discord logger voor FiveM. Standalone en framework-onafhankelijk.
 
-Vanaf v2 is het doel simpel: **Discord maar één keer instellen in `rs_discordlogs`**. Ondersteunde resources sturen hun bestaande webhooklogs automatisch via de centrale bot naar hun eigen Discord-kanaal.
-
-## Wat gebeurt automatisch?
-
-- Discord bot via één bot-token
-- Bot zichtbaar online via Discord Gateway
-- Automatische category `FiveM Logs`
-- Automatisch kanaal per resource
-- Bestaande Discord webhook-embeds kunnen centraal worden onderschept en doorgestuurd
-- Lege webhook-convars van gekoppelde resources hoeven niet meer ingevuld te worden
-- Resourceherkenning gebeurt automatisch
-- Spelernaam, server ID en identifiers worden toegevoegd wanneer `source` beschikbaar is
-- Centrale webhook als nood-fallback
-- Scanner voor bestaande webhooks en loggingexports
-- Testcommando voor gevonden webhooks/loggingexports dat kanalen aanmaakt en bevestigt
-- Automatische `ox_inventory` adapter voor transfers, aankopen en crafting
-- Player connect/disconnect logs
-- Rate-limit retry voor Discord REST
-- Gateway heartbeat, reconnect en session resume
-
-Voorbeeld:
-
-```text
-FiveM Logs
-├── #connections
-├── #ox-inventory
-├── #rs-bikemechanic
-├── #rs-dyno
-├── #rs-jobscreator
-├── #rs-duty
-├── #rs-bossmenu
-├── #rs-phone
-├── #rs-garage
-├── #rs-sql-manager
-└── #rs-carlift
-```
-
-De repo/resource blijft `rs_discordlogs` heten, maar de logger zelf is niet beperkt tot `rs-*` resources.
+Vanaf v2.1 hoef je Discord maar één keer centraal in te stellen. De logger gebruikt één vaste Discord-bot, detecteert logging/webhooks in resources, maakt logkanalen automatisch aan en sorteert die kanalen automatisch in meerdere Discord-categorieën.
 
 ## Installatie
 
-Zorg dat `rs_discordlogs` vóór gekoppelde scripts start:
+Zet de geheimen in `server.cfg` en start `rs_discordlogs` vóór de scripts die de bridge gebruiken:
 
 ```cfg
 set rs_discordlogs_token "JOUW_DISCORD_BOT_TOKEN"
@@ -53,14 +16,7 @@ set rs_discordlogs_webhook "OPTIONELE_CENTRALE_WEBHOOK"
 ensure rs_discordlogs
 ```
 
-Daarna pas de overige resources:
-
-```cfg
-ensure [core]
-ensure [ox]
-ensure [standalone]
-ensure [rs]
-```
+Daarna kunnen de overige groepen/resources starten.
 
 De bot heeft minimaal nodig:
 
@@ -70,93 +26,109 @@ De bot heeft minimaal nodig:
 - Embed Links
 - Read Message History
 
-De centrale webhook is optioneel en wordt alleen als fallback gebruikt wanneer de botroute niet werkt.
+## Vaste centrale bot
 
-## Enige Discord-config
+De botnaam en avatar zijn niet instelbaar in `config.lua`. Berichten via de Bot API gebruiken altijd de echte naam en avatar van jouw Discord-botaccount.
 
-Je hoeft normaal alleen deze drie waarden te beheren:
+Bij de eerste succesvolle verbinding slaat `rs_discordlogs` het echte Discord bot-user-ID lokaal op in de resource KVP-opslag. Vanaf dat moment hoort deze installatie bij die bot. Wanneer later een token van een andere bot wordt ingevuld, weigeren zowel de REST-logging als de Discord Gateway die andere bot.
+
+Er is bewust geen normaal configveld waarmee scripts of resources naar een andere bot kunnen wisselen.
+
+De token zelf wordt nooit hardcoded of naar GitHub geschreven; die blijft uitsluitend in `server.cfg` via:
 
 ```cfg
 set rs_discordlogs_token "BOT_TOKEN"
-set rs_discordlogs_guild "GUILD_ID"
-set rs_discordlogs_webhook "CENTRALE_WEBHOOK"
 ```
 
-Of rechtstreeks in `config.lua`:
+## Automatische categorieën
+
+Standaard maakt de bot deze structuur automatisch aan:
+
+```text
+RS Logs
+├── #rs-bikemechanic
+├── #rs-phone
+├── #rs-garage
+└── #rs-duty
+
+ESX Logs
+├── #es-extended
+└── #esx-...
+
+OX Logs
+├── #ox-inventory
+├── #ox-lib
+├── #ox-target
+└── #ox-doorlock
+
+Algemene Logs
+└── #connections
+
+Overige Logs
+└── #onbekende-third-party-resource
+```
+
+De regels staan in `Config.Categories`:
 
 ```lua
-Config.Discord = {
-    BotToken = '',
-    GuildId = '',
-    CentralWebhook = ''
+Config.Categories = {
+    Enabled = true,
+    AutoCreate = true,
+    AutoMoveExisting = true,
+
+    Default = 'Overige Logs',
+
+    Overrides = {
+        ['connections'] = 'Algemene Logs',
+        ['rs_discordlogs'] = 'Algemene Logs',
+        ['es_extended'] = 'ESX Logs',
+        ['ox_inventory'] = 'OX Logs',
+        ['ox_lib'] = 'OX Logs',
+        ['ox_target'] = 'OX Logs',
+        ['ox_doorlock'] = 'OX Logs',
+        ['oxmysql'] = 'OX Logs'
+    },
+
+    PrefixRules = {
+        { prefix = 'rs-', category = 'RS Logs' },
+        { prefix = 'rs_', category = 'RS Logs' },
+        { prefix = 'esx_', category = 'ESX Logs' },
+        { prefix = 'es_', category = 'ESX Logs' },
+        { prefix = 'ox_', category = 'OX Logs' }
+    }
 }
 ```
 
-Gebruik bij voorkeur server convars en commit nooit echte tokens/webhooks naar GitHub.
+`AutoMoveExisting = true` zorgt ervoor dat een al bestaand logkanaal met dezelfde naam naar de juiste categorie wordt verplaatst wanneer het nog verkeerd staat.
 
-## Transparante legacy webhook bridge
+Exacte `Overrides` hebben voorrang op `PrefixRules`. Alles wat nergens onder valt gaat naar `Overige Logs`.
 
-Een gekoppelde resource laadt:
+## Bestaande webhooklogging centraliseren
 
-```lua
-server_script '@rs_discordlogs/server/intercept.lua'
-```
-
-Daarna mag de bestaande code bijvoorbeeld nog steeds dit doen:
-
-```lua
-PerformHttpRequest(webhook, function() end, 'POST', json.encode({
-    username = 'Mijn script',
-    embeds = {{
-        title = 'Voertuig gekocht',
-        description = 'Een voertuig is gekocht.',
-        color = 5763719
-    }}
-}), {
-    ['Content-Type'] = 'application/json'
-})
-```
-
-De bridge onderschept alleen Discord webhook POSTs. De payload wordt niet naar die losse webhook gestuurd, maar naar:
-
-```text
-resource -> rs_discordlogs -> Discord Bot API -> resourcekanaal
-```
-
-Als het oude script stopt met loggen wanneer zijn webhook leeg is, levert de bridge intern een dummy-webhookwaarde. Die dummy verlaat de server nooit.
-
-### Reeds gekoppelde Rico-Scripts resources
-
-De volgende repos zijn voorbereid op deze centrale bridge:
-
-- RS-core
-- rs-bikemechanic
-- rs-dyno
-- rs-jobscreator
-- rs-duty
-- rs-bossmenu
-- rs_phone
-- rs-garage
-- rs_sql_manager
-- rs-carlift
-
-Daar hoef je dus geen eigen Discord webhook meer voor te configureren zolang `rs_discordlogs` draait.
-
-## Algemene / third-party scripts
-
-De logger is framework-onafhankelijk. Voor een willekeurige resource zijn er drie manieren:
-
-### 1. Bestaande webhook transparant centraliseren
-
-Voeg in het `server_scripts` gedeelte, **na de config maar vóór de servercode**, toe:
+Voor een resource die al `PerformHttpRequest` naar een Discord webhook gebruikt voeg je in het `server_scripts` gedeelte, na de config en vóór de eigen servercode, toe:
 
 ```lua
 '@rs_discordlogs/server/intercept.lua',
 ```
 
-Dit is de beste optie voor scripts die al webhooklogging hebben.
+Voorbeeld:
 
-### 2. Universele export
+```lua
+server_scripts {
+    '@oxmysql/lib/MySQL.lua',
+    'config.lua',
+
+    '@rs_discordlogs/server/intercept.lua',
+
+    'server/main.lua'
+}
+```
+
+De bestaande webhookpayload wordt dan onderschept en via de centrale bot naar het kanaal van de aanroepende resource gestuurd. Een lege webhookconfig in het andere script hoeft daardoor niet meer handmatig gevuld te worden.
+
+## Universele export
+
+Nieuwe scripts kunnen rechtstreeks centraal loggen:
 
 ```lua
 exports['rs_discordlogs']:Log({
@@ -171,33 +143,11 @@ exports['rs_discordlogs']:Log({
 })
 ```
 
-De aanroepende resource wordt automatisch herkend.
+De aanroepende resource wordt automatisch herkend, waarna categorie en kanaal automatisch worden bepaald.
 
-### 3. Compatibility exports
+## ox_inventory
 
-Beschikbaar voor eenvoudige migraties:
-
-```lua
-exports['rs_discordlogs']:LegacyWebhook(title, description, color, fields, source, logType)
-exports['rs_discordlogs']:Webhook(...)
-exports['rs_discordlogs']:DiscordLog(...)
-exports['rs_discordlogs']:SendDiscordLog(...)
-exports['rs_discordlogs']:CreateLog(...)
-exports['rs_discordlogs']:WebhookLog(...)
-exports['rs_discordlogs']:SendWebhook(...)
-```
-
-## Belangrijke technische grens
-
-FiveM staat een resource niet toe bestanden van andere resources te wijzigen. Daardoor kan `rs_discordlogs` niet veilig zelfstandig het `fxmanifest.lua` van ieder willekeurig third-party script aanpassen.
-
-Ook kan een centrale resource niet achteraf de globale `PerformHttpRequest` van een onaangepaste andere resource vervangen. Daarom moet een onbekend third-party script óf de bridge-regel laden, óf een export/event gebruiken, óf een ingebouwde adapter hebben.
-
-De scanner kan zulke webhooks wel detecteren en rapporteren, maar voert geen gevaarlijke automatische bestandswijzigingen uit.
-
-## ox_inventory adapter
-
-Wanneer `ox_inventory` draait, registreert `rs_discordlogs` automatisch hooks. Standaard:
+De ingebouwde adapter kan standaard loggen:
 
 ```lua
 Config.Adapters.OxInventory = {
@@ -210,11 +160,47 @@ Config.Adapters.OxInventory = {
 }
 ```
 
-Slotverplaatsingen binnen dezelfde inventory worden bewust overgeslagen om spam te voorkomen.
+Hierdoor komen `ox_inventory` logs automatisch onder `OX Logs` terecht.
+
+## Scanner en testen
+
+Beschikbare commands:
+
+```text
+rslogs_test
+rslogs_scan
+rslogs_test_webhooks
+rslogs_test_resource <resource>
+rslogs_status
+rslogs_gateway_restart
+```
+
+Na een update kun je het beste uitvoeren:
+
+```text
+restart rs_discordlogs
+rslogs_scan
+rslogs_test_webhooks
+```
+
+`rslogs_test_webhooks`:
+
+1. scant alle gestarte resources;
+2. detecteert webhookcode, webhook-URL's, loggingexports en de fxmanifest bridge;
+3. bepaalt automatisch de categorie;
+4. maakt de categorie aan wanneer die ontbreekt;
+5. maakt het resourcekanaal aan of verplaatst een bestaand kanaal;
+6. stuurt een bevestigingsembed in het juiste kanaal.
+
+Eén resource testen:
+
+```text
+rslogs_test_resource rs-garage
+```
 
 ## Routing
 
-Standaard:
+Standaard gebruikt logging:
 
 ```lua
 Config.Routing.Priority = {
@@ -223,41 +209,11 @@ Config.Routing.Priority = {
 }
 ```
 
-Bestaande resource-webhooks die de scanner aantreft worden dus **niet** gebruikt als bestemming.
+Gevonden oude resource-webhooks worden standaard alleen gedetecteerd en niet als bestemming gebruikt. De centrale webhook is uitsluitend een optionele noodfallback.
 
-Wil je dat voor een legacy server toch:
+## Gateway status
 
-```lua
-Config.Routing.UseDetectedResourceWebhooks = true
-
-Config.Routing.Priority = {
-    'bot',
-    'resource_webhook',
-    'central_webhook'
-}
-```
-
-## Kanaalnamen
-
-Een resource `jg-advancedgarages` wordt automatisch:
-
-```text
-FiveM Logs
-└── #jg-advancedgarages
-```
-
-Override:
-
-```lua
-Config.Routing.ChannelOverrides = {
-    ['ox_inventory'] = 'inventory-logs',
-    ['es_extended'] = 'esx-logs'
-}
-```
-
-## Bot online status
-
-Standaard:
+De vaste bot blijft via Discord Gateway online. De presence kan nog wel worden ingesteld:
 
 ```lua
 Config.Gateway = {
@@ -270,80 +226,16 @@ Config.Gateway = {
 }
 ```
 
-De bot verschijnt bijvoorbeeld als:
-
-```text
-🟢 RS-bot
-Watching FiveM Logs
-```
-
-## Commands
-
-```text
-rslogs_test
-rslogs_scan
-rslogs_test_webhooks
-rslogs_test_resource <resource>
-rslogs_status
-rslogs_gateway_restart
-```
-
-### Gevonden logging testen en kanalen aanmaken
-
-Voer uit:
-
-```text
-rslogs_test_webhooks
-```
-
-De logger scant alle gestarte resources op bestaande Discord-webhooks en bekende loggingexports. Voor iedere gevonden resource wordt via de centrale bot het resourcekanaal aangemaakt of gecontroleerd. Daarna komt er direct een bevestigingsembed in dat kanaal.
-
-De gevonden webhook-URL wordt hierbij **niet** naar de console geschreven en wordt ook niet rechtstreeks aangeroepen. De test loopt volledig via de centrale botconfig.
-
-Voorbeeld console-output:
-
-```text
-[rs_discordlogs] [OK] rs-bikemechanic -> kanaal bevestigd via bot
-[rs_discordlogs] [OK] rs_phone -> kanaal bevestigd via bot
-[rs_discordlogs] [OK] rs-garage -> kanaal bevestigd via bot
-[rs_discordlogs] Test klaar: 3 OK, 0 fout.
-```
-
-Eén resource apart testen:
-
-```text
-rslogs_test_resource rs-garage
-```
-
-Ook hierbij wordt het kanaal automatisch aangemaakt als het nog niet bestaat en wordt een bevestigingsbericht gestuurd.
-
-## Universele lokale server-events
-
-Niet vanaf clients geregistreerd:
-
-```lua
-TriggerEvent('rs_discordlogs:log', {
-    type = 'admin',
-    title = 'Adminactie',
-    description = 'Een adminactie is uitgevoerd.',
-    source = source
-})
-```
-
-Compatibility aliases:
-
-```lua
-TriggerEvent('discordlogs:log', payload)
-TriggerEvent('fivem:discordlog', payload)
-```
+De identiteit van de bot zelf verandert hierdoor niet.
 
 ## Beveiliging
 
-- Bot-token nooit naar GitHub pushen.
-- Gebruik bij voorkeur server convars.
-- De bridge onderschept uitsluitend Discord webhook POSTs.
-- De dummy webhook wordt nooit extern aangeroepen.
+- Commit nooit bot-tokens of webhooktokens naar GitHub.
+- De centrale bot wordt op Discord user-ID vastgezet.
+- Een token van een andere bot wordt geweigerd.
 - Loggingevents zijn server-only.
+- De webhookbridge onderschept alleen Discord webhook POSTs.
+- De dummy webhook uit de compatibility bridge verlaat de server niet.
 - Onbekende exports worden niet blind uitgevoerd.
 - Third-party resourcebestanden worden niet automatisch aangepast.
 

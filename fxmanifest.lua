@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Rico-Scripts'
 description 'Universeel centraal Discord logging-systeem voor FiveM.'
-version '2.0.0'
+version '2.1.0'
 
 lua54 'yes'
 node_version '22'

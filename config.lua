@@ -5,11 +5,21 @@ Config.Debug = false
 -- =========================================================
 -- DISCORD
 -- =========================================================
--- Dit zijn normaal de ENIGE Discord-gegevens die je hoeft in te vullen.
--- Voor productie zijn server.cfg convars aanbevolen:
+-- De centrale bot is vast. Gebruik alleen deze server.cfg convar:
 --   set rs_discordlogs_token "BOT_TOKEN"
+--
+-- Bij de eerste succesvolle verbinding wordt het echte Discord bot-user-ID
+-- lokaal vastgezet. Een token van een andere bot wordt daarna geweigerd.
+-- Botnaam/avatar zijn daarom nergens als instelbare optie aanwezig.
+--
+-- BotToken en TokenConvar hieronder bestaan alleen voor interne/backwards
+-- compatibility met de Gateway-runtime. Als de server convar is ingesteld,
+-- kan hiermee niet naar een andere bot worden gewisseld; de bot-ID lock
+-- controleert de identiteit alsnog.
+--
+-- Discord server en optionele fallback-webhook:
 --   set rs_discordlogs_guild "GUILD_ID"
---   set rs_discordlogs_webhook "CENTRALE_WEBHOOK" -- optioneel fallback
+--   set rs_discordlogs_webhook "CENTRALE_WEBHOOK"
 Config.Discord = {
     BotToken = '',
     TokenConvar = 'rs_discordlogs_token',
@@ -17,22 +27,50 @@ Config.Discord = {
     GuildId = '',
     GuildConvar = 'rs_discordlogs_guild',
 
-    CategoryName = 'FiveM Logs',
-    CategoryId = '', -- Optioneel: ID van een bestaande Discord category.
-
     GeneralChannel = 'algemene-logs',
     ChannelPrefix = '',
     ChannelTopic = 'Automatisch aangemaakt door de centrale FiveM logger.',
 
-    BotName = 'FiveM Logs',
-    AvatarUrl = '',
-
-    -- Alleen een nood-fallback wanneer de bot/API route niet werkt.
+    -- Alleen een nood-fallback wanneer de vaste bot/API route niet werkt.
     CentralWebhook = '',
     CentralWebhookConvar = 'rs_discordlogs_webhook',
 
     AlertRoleId = '',
     MentionRoleOnError = false
+}
+
+-- =========================================================
+-- AUTOMATISCHE DISCORD CATEGORIEEN
+-- =========================================================
+-- Kanalen worden automatisch onder de juiste categorie geplaatst. Bestaande
+-- kanalen met dezelfde naam worden desgewenst naar de juiste categorie verplaatst.
+Config.Categories = {
+    Enabled = true,
+    AutoCreate = true,
+    AutoMoveExisting = true,
+
+    Default = 'Overige Logs',
+
+    -- Exacte resource overrides hebben voorrang op prefixregels.
+    Overrides = {
+        ['connections'] = 'Algemene Logs',
+        ['rs_discordlogs'] = 'Algemene Logs',
+        ['es_extended'] = 'ESX Logs',
+        ['ox_inventory'] = 'OX Logs',
+        ['ox_lib'] = 'OX Logs',
+        ['ox_target'] = 'OX Logs',
+        ['ox_doorlock'] = 'OX Logs',
+        ['oxmysql'] = 'OX Logs'
+    },
+
+    -- Prefixregels worden van boven naar beneden uitgevoerd.
+    PrefixRules = {
+        { prefix = 'rs-', category = 'RS Logs' },
+        { prefix = 'rs_', category = 'RS Logs' },
+        { prefix = 'esx_', category = 'ESX Logs' },
+        { prefix = 'es_', category = 'ESX Logs' },
+        { prefix = 'ox_', category = 'OX Logs' }
+    }
 }
 
 -- =========================================================
@@ -51,8 +89,6 @@ Config.Gateway = {
 -- ROUTING
 -- =========================================================
 Config.Routing = {
-    -- Alles centraal: bot -> centrale webhook fallback.
-    -- Losse webhooks uit andere resources zijn standaard GEEN bestemming meer.
     Priority = {
         'bot',
         'central_webhook'
@@ -61,8 +97,6 @@ Config.Routing = {
     AutoCreateChannels = true,
     UseResourceChannels = true,
 
-    -- Alleen inschakelen wanneer je bewust oude resource-webhooks als extra
-    -- fallback wilt blijven gebruiken.
     UseDetectedResourceWebhooks = false,
 
     ChannelOverrides = {
@@ -70,7 +104,6 @@ Config.Routing = {
         -- ['es_extended'] = 'esx-logs'
     },
 
-    -- Optioneel voor uitzonderingen. Normaal leeg laten.
     ResourceWebhooks = {
         -- ['legacy-resource'] = 'https://discord.com/api/webhooks/...'
     }
@@ -79,8 +112,6 @@ Config.Routing = {
 -- =========================================================
 -- RESOURCE SCANNER
 -- =========================================================
--- De scanner inventariseert resources en bestaande logging/webhooks.
--- Hij verandert geen third-party bestanden en toont nooit volledige webhook-URL's.
 Config.Scanner = {
     Enabled = true,
     ScanOnStart = true,
@@ -120,8 +151,6 @@ Config.Scanner = {
 -- =========================================================
 -- COMPATIBILITY
 -- =========================================================
--- Geeft scripts meerdere algemene export/event-formaten zonder dat die scripts
--- zelf Discord tokens/webhooks hoeven te kennen.
 Config.Compatibility = {
     Enabled = true,
     LocalEvents = true,
@@ -131,15 +160,13 @@ Config.Compatibility = {
 -- =========================================================
 -- AUTOMATISCHE ADAPTERS
 -- =========================================================
--- Deze adapters luisteren rechtstreeks naar ondersteunde resources, zodat je
--- daar niets aan hun Discord-config hoeft te wijzigen.
 Config.Adapters = {
     OxInventory = {
         Enabled = true,
-        Transfers = true,   -- geven / tussen verschillende inventories
+        Transfers = true,
         Purchases = true,
         Crafting = true,
-        ItemUse = false,    -- kan veel logs geven
+        ItemUse = false,
         OpenInventory = false
     }
 }
@@ -169,7 +196,7 @@ Config.Embed = {
 -- ALGEMENE SERVERLOGS
 -- =========================================================
 Config.AutomaticLogs = {
-    ResourceLifecycle = false, -- zet aan als je iedere start/stop wilt loggen
+    ResourceLifecycle = false,
     PlayerConnecting = true,
     PlayerDropped = true
 }
