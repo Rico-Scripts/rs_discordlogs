@@ -57,7 +57,13 @@ local function detectedLoggingInfo(info)
         return false
     end
 
+    if info.loggingDetected == true then
+        return true
+    end
+
     return info.webhook ~= nil
+        or info.webhookCode == true
+        or info.bridge == true
         or (type(info.exports) == 'table' and #info.exports > 0)
 end
 
@@ -81,19 +87,38 @@ local function confirmationPayload(resourceName, info)
         exportsText = table.concat(info.exports, ', ')
     end
 
+    local bridgeConnected = info.bridge == true
+
     return {
-        type = 'success',
-        title = 'Logging gevonden en kanaal bevestigd',
-        description = ('De centrale FiveM logger heeft logging voor `%s` gevonden. Dit kanaal is aangemaakt of gecontroleerd en is klaar voor logs.'):format(resourceName),
+        type = bridgeConnected and 'success' or 'warning',
+        title = bridgeConnected and 'Logging gevonden en bridge bevestigd' or 'Logging gevonden - bridge controleren',
+        description = bridgeConnected
+            and ('De centrale FiveM logger heeft logging voor `%s` gevonden. De fxmanifest bridge is gedetecteerd en dit kanaal is klaar voor logs.'):format(resourceName)
+            or ('De centrale FiveM logger heeft logging voor `%s` gevonden en dit kanaal werkt, maar de fxmanifest bridge is niet gedetecteerd.'):format(resourceName),
         fields = {
             {
-                name = 'Webhook gedetecteerd',
+                name = 'Webhook URL gevonden',
                 value = info.webhook and 'Ja' or 'Nee',
+                inline = true
+            },
+            {
+                name = 'Webhookcode gevonden',
+                value = info.webhookCode and 'Ja' or 'Nee',
+                inline = true
+            },
+            {
+                name = 'FXManifest bridge',
+                value = bridgeConnected and 'Ja' or 'Nee',
                 inline = true
             },
             {
                 name = 'Logging exports',
                 value = exportsText,
+                inline = false
+            },
+            {
+                name = 'Benodigde regel',
+                value = '`@rs_discordlogs/server/intercept.lua`',
                 inline = false
             },
             {
@@ -195,7 +220,7 @@ RegisterCommand('rslogs_test_webhooks', function()
 
     local resources = detectedResources()
     if #resources == 0 then
-        print('[rs_discordlogs] Geen resources met gevonden webhook/logging-export om te testen.')
+        print('[rs_discordlogs] Geen resources met webhookcode, bridge of logging-export om te testen.')
         return
     end
 
@@ -203,21 +228,25 @@ RegisterCommand('rslogs_test_webhooks', function()
 
     local index = 1
     local successes = 0
+    local warnings = 0
     local failures = 0
 
     local function nextResource()
         local resourceName = resources[index]
         if not resourceName then
-            print(('[rs_discordlogs] Test klaar: %s OK, %s fout.'):format(successes, failures))
+            print(('[rs_discordlogs] Test klaar: %s OK, %s waarschuwing(en), %s fout.'):format(successes, warnings, failures))
             return
         end
 
         index = index + 1
 
-        testDetectedResource(resourceName, function(success, result)
-            if success then
+        testDetectedResource(resourceName, function(success, result, info)
+            if success and info and info.bridge then
                 successes = successes + 1
-                print(('[rs_discordlogs] [OK] %s -> kanaal bevestigd via %s'):format(resourceName, tostring(result)))
+                print(('[rs_discordlogs] [OK] %s -> kanaal + bridge bevestigd via %s'):format(resourceName, tostring(result)))
+            elseif success then
+                warnings = warnings + 1
+                print(('[rs_discordlogs] [WAARSCHUWING] %s -> kanaal werkt, maar bridge niet gevonden in fxmanifest.'):format(resourceName))
             else
                 failures = failures + 1
                 print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
@@ -240,8 +269,12 @@ RegisterCommand('rslogs_test_resource', function(_, args)
 
     testDetectedResource(resourceName, function(success, result, info)
         if success then
-            local found = info and detectedLoggingInfo(info) and 'logging gevonden' or 'geen logging-signaal gevonden'
-            print(('[rs_discordlogs] [OK] %s -> kanaal bevestigd via %s (%s).'):format(resourceName, tostring(result), found))
+            local loggingFound = info and detectedLoggingInfo(info) and 'ja' or 'nee'
+            local bridge = info and info.bridge and 'ja' or 'nee'
+            local webhookCode = info and info.webhookCode and 'ja' or 'nee'
+
+            print(('[rs_discordlogs] [OK] %s -> kanaal via %s | logging=%s | webhookcode=%s | bridge=%s')
+                :format(resourceName, tostring(result), loggingFound, webhookCode, bridge))
         else
             print(('[rs_discordlogs] [FOUT] %s -> %s'):format(resourceName, tostring(result)))
         end
