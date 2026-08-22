@@ -12,27 +12,15 @@ const COLORS = {
 };
 
 const DEFAULT_CATEGORY_CONFIG = {
-    defaultCategory: 'Overige Logs',
+    defaultCategory: 'Onbekende Scripts',
+    generalCategory: 'Algemene Logs',
     autoMoveExisting: true,
-    overrides: {
-        connections: 'Algemene Logs',
-        rs_discordlogs: 'Algemene Logs',
-        'rs-admin': 'Admin Logs',
-        rs_admin: 'Admin Logs',
-        es_extended: 'ESX Logs',
-        ox_inventory: 'OX Logs',
-        ox_lib: 'OX Logs',
-        ox_target: 'OX Logs',
-        ox_doorlock: 'OX Logs',
-        oxmysql: 'OX Logs'
-    },
-    prefixes: [
-        ['rs-', 'RS Logs'],
-        ['rs_', 'RS Logs'],
-        ['esx_', 'ESX Logs'],
-        ['es_', 'ESX Logs'],
-        ['ox_', 'OX Logs'],
-        ['ox-', 'OX Logs']
+    generalResources: [
+        'connections',
+        'algemeen',
+        'resources',
+        'server',
+        'rs_discordlogs'
     ]
 };
 
@@ -53,6 +41,18 @@ function sanitizeChannelName(value) {
     text = text.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
     if (!text) text = 'algemene-logs';
     return text.slice(0, 90).replace(/-+$/g, '') || 'algemene-logs';
+}
+
+function sanitizeCategoryName(value, fallback = 'Onbekende Scripts') {
+    let text = String(value || '')
+        .replace(/[\r\n\t\0]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // Voorkom dat een author-veld eruitziet als een Discord mention.
+    text = text.replace(/@everyone/gi, 'everyone').replace(/@here/gi, 'here');
+    if (!text) text = fallback;
+    return truncate(text, 100) || fallback;
 }
 
 function validImageUrl(value) {
@@ -91,7 +91,7 @@ export class DiscordService {
             headers: {
                 Authorization: `Bot ${this.token}`,
                 'Content-Type': 'application/json',
-                'User-Agent': 'Rico-Scripts-rs_discordlogs/3.0.0'
+                'User-Agent': 'Rico-Scripts-rs_discordlogs/3.1.0'
             },
             body: body === null ? undefined : JSON.stringify(body)
         });
@@ -145,24 +145,27 @@ export class DiscordService {
         return `https://discord.com/oauth2/authorize?${params.toString()}`;
     }
 
-    categoryForResource(resourceName) {
+    isGeneralResource(resourceName) {
         const name = String(resourceName || '').toLowerCase();
-        const override = this.categoryConfig.overrides?.[name];
-        if (override) return override;
-        for (const rule of this.categoryConfig.prefixes || []) {
-            if (Array.isArray(rule) && rule[0] && name.startsWith(String(rule[0]).toLowerCase())) {
-                return String(rule[1] || this.categoryConfig.defaultCategory);
-            }
+        return (this.categoryConfig.generalResources || []).some((entry) => String(entry || '').toLowerCase() === name);
+    }
+
+    categoryForResource(resourceName, maker = '') {
+        if (this.isGeneralResource(resourceName)) {
+            return sanitizeCategoryName(this.categoryConfig.generalCategory, 'Algemene Logs');
         }
-        return this.categoryConfig.defaultCategory || 'Overige Logs';
+
+        const normalizedMaker = sanitizeCategoryName(maker, '');
+        if (normalizedMaker) return normalizedMaker;
+
+        return sanitizeCategoryName(this.categoryConfig.defaultCategory, 'Onbekende Scripts');
     }
 
     configuredCategories() {
-        const set = new Set([this.categoryConfig.defaultCategory || 'Overige Logs']);
-        Object.values(this.categoryConfig.overrides || {}).forEach((value) => set.add(String(value)));
-        for (const rule of this.categoryConfig.prefixes || []) {
-            if (Array.isArray(rule) && rule[1]) set.add(String(rule[1]));
-        }
+        const set = new Set([
+            sanitizeCategoryName(this.categoryConfig.generalCategory, 'Algemene Logs'),
+            sanitizeCategoryName(this.categoryConfig.defaultCategory, 'Onbekende Scripts')
+        ]);
         return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
     }
 
@@ -209,16 +212,17 @@ export class DiscordService {
 
     async ensureCategory(guildId, categoryName) {
         const cache = await this.guildCache(guildId);
-        const key = String(categoryName).toLowerCase();
+        const safeName = sanitizeCategoryName(categoryName, 'Onbekende Scripts');
+        const key = safeName.toLowerCase();
         const existing = cache.categories.get(key);
         if (existing) return existing;
 
         const created = await this.request('POST', `/guilds/${encodeURIComponent(guildId)}/channels`, {
-            name: String(categoryName).slice(0, 100),
+            name: safeName,
             type: 4
         });
 
-        if (!created?.id) throw new Error(`Discord categorie ${categoryName} kon niet worden aangemaakt.`);
+        if (!created?.id) throw new Error(`Discord categorie ${safeName} kon niet worden aangemaakt.`);
         cache.categories.set(key, String(created.id));
         return String(created.id);
     }
@@ -229,9 +233,9 @@ export class DiscordService {
         }
     }
 
-    async ensureChannel(guildId, resourceName) {
+    async ensureChannel(guildId, resourceName, maker = '') {
         const channelName = sanitizeChannelName(resourceName);
-        const categoryName = this.categoryForResource(resourceName);
+        const categoryName = this.categoryForResource(resourceName, maker);
         const parentId = await this.ensureCategory(guildId, categoryName);
         const cache = await this.guildCache(guildId);
 
@@ -245,11 +249,12 @@ export class DiscordService {
             return { id: fallback.id, channelName, categoryName };
         }
 
+        const topicMaker = maker ? `Maker: ${sanitizeCategoryName(maker, 'Onbekend')}. ` : '';
         const created = await this.request('POST', `/guilds/${encodeURIComponent(guildId)}/channels`, {
             name: channelName,
             type: 0,
             parent_id: parentId,
-            topic: 'Automatisch beheerd door de officiele Rico Scripts logging bot.'
+            topic: truncate(`${topicMaker}Automatisch beheerd door de officiele Rico Scripts logging bot.`, 1024)
         });
 
         if (!created?.id) throw new Error(`Discord kanaal ${channelName} kon niet worden aangemaakt.`);
@@ -258,9 +263,9 @@ export class DiscordService {
         return { id: entry.id, channelName, categoryName };
     }
 
-    buildEmbed(resourceName, payload = {}) {
+    buildEmbed(resourceName, payload = {}, maker = '') {
         const logType = String(payload.type || payload.level || 'info').toLowerCase();
-        const fields = normalizeFields(payload.fields, 17);
+        const fields = normalizeFields(payload.fields, 16);
         const player = payload.player && typeof payload.player === 'object' ? payload.player : null;
 
         if (player) {
@@ -276,8 +281,10 @@ export class DiscordService {
             if (identifiers.fivem) fields.push({ name: 'FiveM', value: `\`fivem:${truncate(identifiers.fivem, 64)}\``, inline: true });
         }
 
+        const categoryName = this.categoryForResource(resourceName, maker);
         fields.push({ name: 'Resource', value: `\`${truncate(resourceName || 'unknown', 90)}\``, inline: true });
-        fields.push({ name: 'Categorie', value: `\`${truncate(this.categoryForResource(resourceName), 90)}\``, inline: true });
+        fields.push({ name: 'Maker', value: `\`${truncate(maker || 'Onbekend', 90)}\``, inline: true });
+        fields.push({ name: 'Categorie', value: `\`${truncate(categoryName, 90)}\``, inline: true });
         fields.push({ name: 'Type', value: `\`${truncate(logType, 50)}\``, inline: true });
 
         const embed = {
@@ -296,9 +303,9 @@ export class DiscordService {
         return embed;
     }
 
-    async sendLog(guildId, resourceName, payload) {
-        const target = await this.ensureChannel(guildId, resourceName);
-        const embed = this.buildEmbed(resourceName, payload);
+    async sendLog(guildId, resourceName, payload, maker = '') {
+        const target = await this.ensureChannel(guildId, resourceName, maker);
+        const embed = this.buildEmbed(resourceName, payload, maker);
         await this.request('POST', `/channels/${target.id}/messages`, {
             embeds: [embed],
             allowed_mentions: { parse: [] }
