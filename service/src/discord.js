@@ -49,7 +49,6 @@ function sanitizeCategoryName(value, fallback = 'Onbekende Scripts') {
         .replace(/\s+/g, ' ')
         .trim();
 
-    // Voorkom dat een author-veld eruitziet als een Discord mention.
     text = text.replace(/@everyone/gi, 'everyone').replace(/@here/gi, 'here');
     if (!text) text = fallback;
     return truncate(text, 100) || fallback;
@@ -162,11 +161,10 @@ export class DiscordService {
     }
 
     configuredCategories() {
-        const set = new Set([
-            sanitizeCategoryName(this.categoryConfig.generalCategory, 'Algemene Logs'),
-            sanitizeCategoryName(this.categoryConfig.defaultCategory, 'Onbekende Scripts')
-        ]);
-        return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+        // Maker-categorieen zijn volledig dynamisch. Er wordt bij registratie
+        // niets vooraf aangemaakt; de eerste log van een resource maakt pas de
+        // categorie van de fxmanifest-author aan.
+        return [];
     }
 
     async botInGuild(guildId, force = false) {
