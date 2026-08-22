@@ -16,6 +16,7 @@ Vanaf v2 is het doel simpel: **Discord maar één keer instellen in `rs_discordl
 - Spelernaam, server ID en identifiers worden toegevoegd wanneer `source` beschikbaar is
 - Centrale webhook als nood-fallback
 - Scanner voor bestaande webhooks en loggingexports
+- Testcommando voor gevonden webhooks/loggingexports dat kanalen aanmaakt en bevestigt
 - Automatische `ox_inventory` adapter voor transfers, aankopen en crafting
 - Player connect/disconnect logs
 - Rate-limit retry voor Discord REST
@@ -281,9 +282,40 @@ Watching FiveM Logs
 ```text
 rslogs_test
 rslogs_scan
+rslogs_test_webhooks
+rslogs_test_resource <resource>
 rslogs_status
 rslogs_gateway_restart
 ```
+
+### Gevonden logging testen en kanalen aanmaken
+
+Voer uit:
+
+```text
+rslogs_test_webhooks
+```
+
+De logger scant alle gestarte resources op bestaande Discord-webhooks en bekende loggingexports. Voor iedere gevonden resource wordt via de centrale bot het resourcekanaal aangemaakt of gecontroleerd. Daarna komt er direct een bevestigingsembed in dat kanaal.
+
+De gevonden webhook-URL wordt hierbij **niet** naar de console geschreven en wordt ook niet rechtstreeks aangeroepen. De test loopt volledig via de centrale botconfig.
+
+Voorbeeld console-output:
+
+```text
+[rs_discordlogs] [OK] rs-bikemechanic -> kanaal bevestigd via bot
+[rs_discordlogs] [OK] rs_phone -> kanaal bevestigd via bot
+[rs_discordlogs] [OK] rs-garage -> kanaal bevestigd via bot
+[rs_discordlogs] Test klaar: 3 OK, 0 fout.
+```
+
+Eén resource apart testen:
+
+```text
+rslogs_test_resource rs-garage
+```
+
+Ook hierbij wordt het kanaal automatisch aangemaakt als het nog niet bestaat en wordt een bevestigingsbericht gestuurd.
 
 ## Universele lokale server-events
 
