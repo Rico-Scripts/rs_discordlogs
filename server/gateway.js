@@ -3,6 +3,7 @@
 const RESOURCE_NAME = GetCurrentResourceName();
 const API_VERSION = 10;
 const GATEWAY_BOT_URL = `https://discord.com/api/v${API_VERSION}/gateway/bot`;
+const FIXED_BOT_KVP = 'rs_discordlogs:fixed_bot_user_id';
 
 let socket = null;
 let heartbeatTimer = null;
@@ -17,6 +18,7 @@ let stopping = false;
 let connecting = false;
 let forcedResume = null;
 let botUserName = '';
+let botRejected = false;
 
 function readRuntimeConfig() {
     const status = GetConvar('rs_discordlogs_gateway_status_runtime', 'online');
@@ -185,7 +187,7 @@ function resetSession() {
 }
 
 function scheduleConnect(canResume, delay) {
-    if (stopping) {
+    if (stopping || botRejected) {
         return;
     }
 
@@ -197,7 +199,7 @@ function scheduleConnect(canResume, delay) {
 }
 
 function requestReconnect(canResume, delay) {
-    if (stopping) {
+    if (stopping || botRejected) {
         return;
     }
 
@@ -219,12 +221,58 @@ function requestReconnect(canResume, delay) {
     scheduleConnect(canResume, delay);
 }
 
+function validatePinnedBot(user, onValid) {
+    const currentId = user && user.id ? String(user.id) : '';
+
+    if (!currentId) {
+        botRejected = true;
+        publishState('wrong_bot', botUserName);
+        warn('Discord READY bevatte geen bot-user-ID; verbinding wordt geweigerd.');
+        return;
+    }
+
+    setImmediate(() => {
+        try {
+            let pinnedId = GetResourceKvpString(FIXED_BOT_KVP) || '';
+
+            if (!pinnedId) {
+                SetResourceKvp(FIXED_BOT_KVP, currentId);
+                pinnedId = currentId;
+                SetConvar('rs_discordlogs_fixed_bot_id_runtime', pinnedId);
+                info(`Centrale Discord bot vastgezet op user-ID ${pinnedId}.`);
+            }
+
+            if (pinnedId !== currentId) {
+                botRejected = true;
+                publishState('wrong_bot', botUserName);
+                warn(`Andere bot geweigerd. Vastgezette bot-ID: ${pinnedId}, aangeboden bot-ID: ${currentId}.`);
+
+                try {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.close(4000, 'wrong fixed bot');
+                    }
+                } catch (_) {
+                    // Verbinding wordt sowieso niet hervat.
+                }
+                return;
+            }
+
+            SetConvar('rs_discordlogs_fixed_bot_id_runtime', pinnedId);
+            onValid();
+        } catch (error) {
+            botRejected = true;
+            publishState('wrong_bot', botUserName);
+            warn(`Vaste bot-validatie mislukt: ${error.message || error}`);
+        }
+    });
+}
+
 async function fetchGatewayBot() {
     const response = await fetch(GATEWAY_BOT_URL, {
         method: 'GET',
         headers: {
             Authorization: `Bot ${runtimeConfig.token}`,
-            'User-Agent': 'rs_discordlogs/1.1.0'
+            'User-Agent': 'rs_discordlogs/2.1.0'
         }
     });
 
@@ -250,7 +298,7 @@ async function fetchGatewayBot() {
 }
 
 async function connect(canResume = true) {
-    if (stopping || connecting) {
+    if (stopping || connecting || botRejected) {
         return;
     }
 
@@ -316,11 +364,15 @@ async function connect(canResume = true) {
                             ? `${payload.d.user.username || 'Bot'}${payload.d.user.discriminator && payload.d.user.discriminator !== '0' ? `#${payload.d.user.discriminator}` : ''}`
                             : 'Discord bot';
 
-                        publishState('online', botUserName);
-                        info(`${botUserName} is online en verbonden met Discord.`);
+                        validatePinnedBot(payload.d.user, () => {
+                            publishState('online', botUserName);
+                            info(`${botUserName} is online en verbonden met Discord als vaste logging-bot.`);
+                        });
                     } else if (payload.t === 'RESUMED') {
-                        publishState('online', botUserName || 'Discord bot');
-                        info('Discord Gateway sessie succesvol hervat.');
+                        if (!botRejected) {
+                            publishState('online', botUserName || 'Discord bot');
+                            info('Discord Gateway sessie succesvol hervat.');
+                        }
                     }
                     break;
                 }
@@ -391,6 +443,11 @@ async function connect(canResume = true) {
                 return;
             }
 
+            if (botRejected) {
+                publishState('wrong_bot', botUserName);
+                return;
+            }
+
             const code = Number(event.code || 0);
             const fatalCodes = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
             const nonResumableCodes = new Set([1000, 1001, 4007, 4009]);
@@ -430,6 +487,7 @@ async function connect(canResume = true) {
 on('rs_discordlogs:gateway:restart', () => {
     refreshRuntimeConfig();
     debug('Gateway restart aangevraagd.');
+    botRejected = false;
     forcedResume = false;
     resetSession();
     requestReconnect(false, 1000);
