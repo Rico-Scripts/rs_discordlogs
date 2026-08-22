@@ -1,134 +1,107 @@
-# rs_discordlogs
+# rs_discordlogs v3
 
-Universele centrale Discord logger voor FiveM. Standalone en framework-onafhankelijk.
+`rs_discordlogs` is een universele centrale Discord logger voor FiveM. Vanaf v3 gebruikt iedere gelicentieerde installatie **de officiële centraal gehoste Rico Scripts Discord bot**.
 
-Vanaf v2.1 hoef je Discord maar één keer centraal in te stellen. De logger gebruikt één vaste Discord-bot, detecteert logging/webhooks in resources, maakt logkanalen automatisch aan en sorteert die kanalen automatisch in meerdere Discord-categorieën.
+## Belangrijk verschil met v2
 
-## Installatie
+De downloadbare FiveM resource bevat geen bot-token, webhook-token of Discord bot-login meer.
 
-Zet de geheimen in `server.cfg` en start `rs_discordlogs` vóór de scripts die de bridge gebruiken:
+```text
+FiveM resource
+    -> HTTPS + license key
+Rico Scripts Logging API
+    -> officiele bot-token (alleen op Rico VPS)
+Discord
+```
+
+Daardoor kan iemand die de resource downloadt jouw bot-token niet uitlezen of overnemen.
+
+## Klantinstallatie
+
+In `server.cfg` zijn nog maar drie waarden nodig:
 
 ```cfg
-set rs_discordlogs_token "JOUW_DISCORD_BOT_TOKEN"
-set rs_discordlogs_guild "JOUW_DISCORD_SERVER_ID"
-set rs_discordlogs_webhook "OPTIONELE_CENTRALE_WEBHOOK"
+set rs_discordlogs_api_url "https://JOUW-LOGGING-DOMEIN"
+set rs_discordlogs_license "RSLOGS_KLANT_LICENSE_KEY"
+set rs_discordlogs_guild "DISCORD_SERVER_ID"
 
 ensure rs_discordlogs
 ```
 
-Daarna kunnen de overige groepen/resources starten.
+Er hoort **geen** `rs_discordlogs_token` meer op een klantserver te staan.
 
-De bot heeft minimaal nodig:
+Start `rs_discordlogs` vóór resources die de bridge gebruiken.
 
-- View Channels
-- Manage Channels
-- Send Messages
-- Embed Links
-- Read Message History
+## Officiële bot uitnodigen
 
-## Vaste centrale bot
+Voer in de FiveM serverconsole uit:
 
-De botnaam en avatar zijn niet instelbaar in `config.lua`. Berichten via de Bot API gebruiken altijd de echte naam en avatar van jouw Discord-botaccount.
+```text
+rslogs_invite
+```
 
-Bij de eerste succesvolle verbinding slaat `rs_discordlogs` het echte Discord bot-user-ID lokaal op in de resource KVP-opslag. Vanaf dat moment hoort deze installatie bij die bot. Wanneer later een token van een andere bot wordt ingevuld, weigeren zowel de REST-logging als de Discord Gateway die andere bot.
+De API geeft de invite van de officiële Rico Scripts logging bot terug, al ingevuld voor de geconfigureerde Discord guild.
 
-Er is bewust geen normaal configveld waarmee scripts of resources naar een andere bot kunnen wisselen.
+Daarna:
 
-De token zelf wordt nooit hardcoded of naar GitHub geschreven; die blijft uitsluitend in `server.cfg` via:
-
-```cfg
-set rs_discordlogs_token "BOT_TOKEN"
+```text
+restart rs_discordlogs
+rslogs_status
+rslogs_test
 ```
 
 ## Automatische categorieën
 
-Standaard maakt de bot deze structuur automatisch aan:
+Categorieën worden door de centrale service beheerd, niet door klantresources. Standaard:
+
+```text
+RS Logs
+ESX Logs
+OX Logs
+Admin Logs
+Algemene Logs
+Overige Logs
+```
+
+Voorbeelden:
 
 ```text
 RS Logs
 ├── #rs-bikemechanic
 ├── #rs-phone
-├── #rs-garage
-└── #rs-duty
-
-ESX Logs
-├── #es-extended
-└── #esx-...
+└── #rs-garage
 
 OX Logs
 ├── #ox-inventory
-├── #ox-lib
-├── #ox-target
 └── #ox-doorlock
 
 Algemene Logs
 └── #connections
-
-Overige Logs
-└── #onbekende-third-party-resource
 ```
 
-De regels staan in `Config.Categories`:
+Bestaande kanalen met dezelfde naam kunnen automatisch naar de correcte categorie worden verplaatst.
 
-```lua
-Config.Categories = {
-    Enabled = true,
-    AutoCreate = true,
-    AutoMoveExisting = true,
+## Legacy webhook bridge
 
-    Default = 'Overige Logs',
-
-    Overrides = {
-        ['connections'] = 'Algemene Logs',
-        ['rs_discordlogs'] = 'Algemene Logs',
-        ['es_extended'] = 'ESX Logs',
-        ['ox_inventory'] = 'OX Logs',
-        ['ox_lib'] = 'OX Logs',
-        ['ox_target'] = 'OX Logs',
-        ['ox_doorlock'] = 'OX Logs',
-        ['oxmysql'] = 'OX Logs'
-    },
-
-    PrefixRules = {
-        { prefix = 'rs-', category = 'RS Logs' },
-        { prefix = 'rs_', category = 'RS Logs' },
-        { prefix = 'esx_', category = 'ESX Logs' },
-        { prefix = 'es_', category = 'ESX Logs' },
-        { prefix = 'ox_', category = 'OX Logs' }
-    }
-}
-```
-
-`AutoMoveExisting = true` zorgt ervoor dat een al bestaand logkanaal met dezelfde naam naar de juiste categorie wordt verplaatst wanneer het nog verkeerd staat.
-
-Exacte `Overrides` hebben voorrang op `PrefixRules`. Alles wat nergens onder valt gaat naar `Overige Logs`.
-
-## Bestaande webhooklogging centraliseren
-
-Voor een resource die al `PerformHttpRequest` naar een Discord webhook gebruikt voeg je in het `server_scripts` gedeelte, na de config en vóór de eigen servercode, toe:
+Scripts die al Discord webhooklogging gebruiken kunnen centraal worden doorgestuurd met:
 
 ```lua
 '@rs_discordlogs/server/intercept.lua',
 ```
 
-Voorbeeld:
+Plaats hem in `server_scripts` **na de config en vóór de eigen servercode**:
 
 ```lua
 server_scripts {
-    '@oxmysql/lib/MySQL.lua',
     'config.lua',
-
     '@rs_discordlogs/server/intercept.lua',
-
     'server/main.lua'
 }
 ```
 
-De bestaande webhookpayload wordt dan onderschept en via de centrale bot naar het kanaal van de aanroepende resource gestuurd. Een lege webhookconfig in het andere script hoeft daardoor niet meer handmatig gevuld te worden.
+Het oude script mag zijn bestaande `PerformHttpRequest(webhook, ...)` blijven uitvoeren. De bridge onderschept Discord webhook-POSTs en zet ze om naar een hosted logrequest. De losse webhook wordt niet gebruikt als bestemming.
 
 ## Universele export
-
-Nieuwe scripts kunnen rechtstreeks centraal loggen:
 
 ```lua
 exports['rs_discordlogs']:Log({
@@ -143,102 +116,86 @@ exports['rs_discordlogs']:Log({
 })
 ```
 
-De aanroepende resource wordt automatisch herkend, waarna categorie en kanaal automatisch worden bepaald.
+De aanroepende resource wordt automatisch herkend.
 
-## ox_inventory
+Compatibility exports blijven beschikbaar:
 
-De ingebouwde adapter kan standaard loggen:
-
-```lua
-Config.Adapters.OxInventory = {
-    Enabled = true,
-    Transfers = true,
-    Purchases = true,
-    Crafting = true,
-    ItemUse = false,
-    OpenInventory = false
-}
+```text
+LegacyWebhook
+Webhook
+DiscordLog
+SendDiscordLog
+CreateLog
+WebhookLog
+SendWebhook
+Logger
 ```
-
-Hierdoor komen `ox_inventory` logs automatisch onder `OX Logs` terecht.
 
 ## Scanner en testen
 
-Beschikbare commands:
-
 ```text
-rslogs_test
 rslogs_scan
 rslogs_test_webhooks
 rslogs_test_resource <resource>
+```
+
+`rslogs_test_webhooks` scant gestarte resources op webhookcode, webhook-URL's, loggingexports en de manifest-bridge. Voor iedere gevonden resource wordt via de hosted API en officiële bot een kanaal/testbericht aangemaakt.
+
+## Statuscommands
+
+```text
 rslogs_status
-rslogs_gateway_restart
+rslogs_invite
+rslogs_test
 ```
 
-Na een update kun je het beste uitvoeren:
+`rslogs_status` controleert de license, installatiebinding, Discord guild en aanwezigheid van de officiële bot.
 
-```text
-restart rs_discordlogs
-rslogs_scan
-rslogs_test_webhooks
+## Licensebeveiliging
+
+Elke klant krijgt een unieke `RSLOGS_...` key. De hosted service:
+
+- slaat alleen een SHA-256 hash van de key op;
+- bindt de key bij eerste gebruik aan één Discord guild;
+- bindt hem ook aan één FiveM installatie-ID;
+- kan keys uitschakelen, laten verlopen of opnieuw binden;
+- rate-limitt logrequests per license;
+- accepteert nooit een klant-bot-token;
+- stuurt geen willekeurige Discord mentions door.
+
+## ox_inventory
+
+De bestaande adapter blijft werken voor onder andere:
+
+- transfers;
+- aankopen;
+- crafting.
+
+Item use en open-inventory logs staan standaard uit vanwege spam.
+
+## Server-side hosted service
+
+De officiële service staat in [`service/`](service/) en is bedoeld om op de Rico Scripts VPS te draaien. Zie `service/README.md` voor deployment, systemd, Nginx en licensebeheer.
+
+De bot-token hoort uitsluitend in de VPS environment van die service te staan.
+
+## Migratie van v2 naar v3
+
+Verwijder op klantservers:
+
+```cfg
+set rs_discordlogs_token "..."
+set rs_discordlogs_webhook "..."
 ```
 
-`rslogs_test_webhooks`:
+Gebruik in plaats daarvan:
 
-1. scant alle gestarte resources;
-2. detecteert webhookcode, webhook-URL's, loggingexports en de fxmanifest bridge;
-3. bepaalt automatisch de categorie;
-4. maakt de categorie aan wanneer die ontbreekt;
-5. maakt het resourcekanaal aan of verplaatst een bestaand kanaal;
-6. stuurt een bevestigingsembed in het juiste kanaal.
-
-Eén resource testen:
-
-```text
-rslogs_test_resource rs-garage
+```cfg
+set rs_discordlogs_api_url "https://JOUW-LOGGING-DOMEIN"
+set rs_discordlogs_license "RSLOGS_..."
+set rs_discordlogs_guild "DISCORD_SERVER_ID"
 ```
-
-## Routing
-
-Standaard gebruikt logging:
-
-```lua
-Config.Routing.Priority = {
-    'bot',
-    'central_webhook'
-}
-```
-
-Gevonden oude resource-webhooks worden standaard alleen gedetecteerd en niet als bestemming gebruikt. De centrale webhook is uitsluitend een optionele noodfallback.
-
-## Gateway status
-
-De vaste bot blijft via Discord Gateway online. De presence kan nog wel worden ingesteld:
-
-```lua
-Config.Gateway = {
-    Enabled = true,
-    Status = 'online',
-    ActivityType = 3,
-    ActivityName = 'FiveM Logs',
-    ReconnectDelayMs = 5000,
-    Debug = false
-}
-```
-
-De identiteit van de bot zelf verandert hierdoor niet.
-
-## Beveiliging
-
-- Commit nooit bot-tokens of webhooktokens naar GitHub.
-- De centrale bot wordt op Discord user-ID vastgezet.
-- Een token van een andere bot wordt geweigerd.
-- Loggingevents zijn server-only.
-- De webhookbridge onderschept alleen Discord webhook POSTs.
-- De dummy webhook uit de compatibility bridge verlaat de server niet.
-- Onbekende exports worden niet blind uitgevoerd.
-- Third-party resourcebestanden worden niet automatisch aangepast.
 
 ## Licentie
 
-MIT License.
+Dit project is **niet meer MIT**. Het valt onder de `Rico Scripts Proprietary License v1.0` in [`LICENSE`](LICENSE). Herdistributie, resale, key sharing en het omzeilen van license/servicebeveiliging zijn zonder schriftelijke toestemming niet toegestaan.
