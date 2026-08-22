@@ -5,18 +5,25 @@ Config.Debug = false
 -- =========================================================
 -- DISCORD
 -- =========================================================
--- De centrale bot is bewust NIET instelbaar in deze config.
--- rs_discordlogs gebruikt altijd de bot-token uit:
+-- De centrale bot is vast. Gebruik alleen deze server.cfg convar:
 --   set rs_discordlogs_token "BOT_TOKEN"
 --
--- Bij de eerste succesvolle verbinding wordt het Discord bot-user-ID lokaal
--- vastgezet in de resource KVP-opslag. Een andere bot-token wordt daarna
--- geweigerd. Er is bewust geen normale config/resetoptie voor die bot-lock.
+-- Bij de eerste succesvolle verbinding wordt het echte Discord bot-user-ID
+-- lokaal vastgezet. Een token van een andere bot wordt daarna geweigerd.
+-- Botnaam/avatar zijn daarom nergens als instelbare optie aanwezig.
 --
--- De Discord server en optionele fallback-webhook blijven wel instelbaar:
+-- BotToken en TokenConvar hieronder bestaan alleen voor interne/backwards
+-- compatibility met de Gateway-runtime. Als de server convar is ingesteld,
+-- kan hiermee niet naar een andere bot worden gewisseld; de bot-ID lock
+-- controleert de identiteit alsnog.
+--
+-- Discord server en optionele fallback-webhook:
 --   set rs_discordlogs_guild "GUILD_ID"
 --   set rs_discordlogs_webhook "CENTRALE_WEBHOOK"
 Config.Discord = {
+    BotToken = '',
+    TokenConvar = 'rs_discordlogs_token',
+
     GuildId = '',
     GuildConvar = 'rs_discordlogs_guild',
 
@@ -82,7 +89,6 @@ Config.Gateway = {
 -- ROUTING
 -- =========================================================
 Config.Routing = {
-    -- Alles centraal: vaste bot -> centrale webhook fallback.
     Priority = {
         'bot',
         'central_webhook'
@@ -91,7 +97,6 @@ Config.Routing = {
     AutoCreateChannels = true,
     UseResourceChannels = true,
 
-    -- Oude resource-webhooks worden alleen gedetecteerd en niet gebruikt.
     UseDetectedResourceWebhooks = false,
 
     ChannelOverrides = {
@@ -99,7 +104,6 @@ Config.Routing = {
         -- ['es_extended'] = 'esx-logs'
     },
 
-    -- Alleen voor uitzonderlijke legacy situaties. Normaal leeg laten.
     ResourceWebhooks = {
         -- ['legacy-resource'] = 'https://discord.com/api/webhooks/...'
     }
