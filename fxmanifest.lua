@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Rico-Scripts'
 description 'Hosted centrale Discord logging voor FiveM via de officiele Rico Scripts bot.'
-version '3.0.0'
+version '3.1.0'
 
 lua54 'yes'
 
