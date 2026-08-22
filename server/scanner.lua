@@ -53,7 +53,6 @@ local function scanWebhook(content)
         return nil
     end
 
-    -- Discord en legacy discordapp webhook-URL's.
     return content:match('(https://discord%.com/api/webhooks/%d+/[%w%-%._]+)')
         or content:match('(https://discordapp%.com/api/webhooks/%d+/[%w%-%._]+)')
 end
@@ -68,21 +67,18 @@ local function scanLoggingExports(content, foundExports, exportLookup)
         known[exportName:lower()] = true
     end
 
-    -- Runtime Lua exports: exports('SendLog', function(...) ... end)
     for exportName in content:gmatch("exports%s*%(%s*['\"]([^'\"]+)['\"]") do
         if known[exportName:lower()] then
             uniqueInsert(foundExports, exportLookup, exportName)
         end
     end
 
-    -- Legacy manifest: server_export 'SendLog'
     for exportName in content:gmatch("server_export%s+['\"]([^'\"]+)['\"]") do
         if known[exportName:lower()] then
             uniqueInsert(foundExports, exportLookup, exportName)
         end
     end
 
-    -- server_exports { 'SendLog', 'DiscordLog' }
     for block in content:gmatch('server_exports%s*(%b{})') do
         for exportName in block:gmatch("['\"]([^'\"]+)['\"]") do
             if known[exportName:lower()] then
@@ -147,7 +143,7 @@ function RSDiscordLogs.ScanResource(resourceName)
     RSDiscordLogs.ResourceInfo[resourceName] = result
 
     if Config.Debug then
-        local webhookText = result.webhook and 'ja' or 'nee'
+        local webhookText = result.webhook and 'gevonden' or 'geen'
         local exportText = #result.exports > 0 and table.concat(result.exports, ', ') or 'geen'
 
         RSDiscordLogs.Debug(('%s: webhook=%s, logging exports=%s, bestanden=%s')
@@ -194,18 +190,25 @@ function RSDiscordLogs.ScanAllResources()
         end
     end
 
-    RSDiscordLogs.Info(('Scanner klaar: %s resources, %s webhook(s), %s resource(s) met logging-export(s).')
+    RSDiscordLogs.Info(('Scanner klaar: %s resources, %s bestaande webhook(s) gedetecteerd, %s resource(s) met logging-export(s).')
         :format(stats.scanned, stats.webhooks, stats.exports))
 
     return stats
 end
 
 function RSDiscordLogs.GetResourceWebhook(resourceName)
+    -- Expliciet geconfigureerde uitzonderingen mogen altijd worden gebruikt.
     local configured = Config.Routing.ResourceWebhooks
         and Config.Routing.ResourceWebhooks[resourceName]
 
     if configured and configured ~= '' then
         return configured
+    end
+
+    -- Gescande third-party webhooks zijn standaard alleen diagnostisch. Zo is
+    -- rs_discordlogs de enige Discord-config die nodig is.
+    if not Config.Routing.UseDetectedResourceWebhooks then
+        return nil
     end
 
     local info = RSDiscordLogs.ResourceInfo[resourceName]
