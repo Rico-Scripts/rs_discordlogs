@@ -40,10 +40,6 @@ local function isWebhookConvar(name)
         and name:lower():find('webhook', 1, true) ~= nil
 end
 
--- Veel bestaande resources stoppen met loggen wanneer hun eigen webhook-convar
--- leeg is. Zolang de centrale logger draait geven we alleen voor webhook-convars
--- een lokale dummy terug. De HTTP-call wordt daarna hieronder onderschept en
--- verlaat de server niet.
 GetConvar = function(name, defaultValue)
     local value = originalGetConvar(name, defaultValue)
 
@@ -57,8 +53,8 @@ GetConvar = function(name, defaultValue)
     return value
 end
 
-local function fillEmptyWebhookConfig(tbl, depth, visited)
-    if type(tbl) ~= 'table' or depth > 5 then
+local function fillEmptyWebhookConfig(tbl, depth, visited, webhookContext)
+    if type(tbl) ~= 'table' or depth > 6 then
         return
     end
 
@@ -69,18 +65,28 @@ local function fillEmptyWebhookConfig(tbl, depth, visited)
     visited[tbl] = true
 
     for key, value in pairs(tbl) do
-        if type(key) == 'string' and key:lower():find('webhook', 1, true) then
-            if type(value) == 'string' and value == '' then
+        local keyIsWebhook = type(key) == 'string'
+            and key:lower():find('webhook', 1, true) ~= nil
+        local insideWebhook = webhookContext == true or keyIsWebhook
+
+        if type(value) == 'string' then
+            if insideWebhook and value == '' then
                 tbl[key] = DUMMY_WEBHOOK
             end
         elseif type(value) == 'table' then
-            fillEmptyWebhookConfig(value, depth + 1, visited)
+            fillEmptyWebhookConfig(value, depth + 1, visited, insideWebhook)
         end
     end
 end
 
-if loggerStarted() and type(Config) == 'table' then
-    fillEmptyWebhookConfig(Config, 0, {})
+if loggerStarted() then
+    if type(Config) == 'table' then
+        fillEmptyWebhookConfig(Config, 0, {}, false)
+    end
+
+    if type(RSConfig) == 'table' then
+        fillEmptyWebhookConfig(RSConfig, 0, {}, false)
+    end
 end
 
 PerformHttpRequest = function(url, callback, method, data, headers, options)
@@ -116,9 +122,6 @@ PerformHttpRequest = function(url, callback, method, data, headers, options)
             end
         end
 
-        -- Een echte bestaande webhook mag bij een tijdelijk probleem nog als
-        -- legacy fallback werken. De lokale dummy mag uiteraard nooit naar
-        -- Discord worden verstuurd.
         if url == DUMMY_WEBHOOK then
             if type(callback) == 'function' then
                 SetTimeout(0, function()
