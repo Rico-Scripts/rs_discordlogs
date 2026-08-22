@@ -2,11 +2,14 @@ Config = {}
 
 Config.Debug = false
 
--- De Discord bot-token kan hier worden ingevuld.
--- Voor productie is een server.cfg convar veiliger:
+-- =========================================================
+-- DISCORD
+-- =========================================================
+-- Dit zijn normaal de ENIGE Discord-gegevens die je hoeft in te vullen.
+-- Voor productie zijn server.cfg convars aanbevolen:
 --   set rs_discordlogs_token "BOT_TOKEN"
 --   set rs_discordlogs_guild "GUILD_ID"
---   set rs_discordlogs_webhook "CENTRALE_WEBHOOK"
+--   set rs_discordlogs_webhook "CENTRALE_WEBHOOK" -- optioneel fallback
 Config.Discord = {
     BotToken = '',
     TokenConvar = 'rs_discordlogs_token',
@@ -15,80 +18,77 @@ Config.Discord = {
     GuildConvar = 'rs_discordlogs_guild',
 
     CategoryName = 'FiveM Logs',
-    CategoryId = '', -- Optioneel: bestaande Discord category ID.
+    CategoryId = '', -- Optioneel: ID van een bestaande Discord category.
 
     GeneralChannel = 'algemene-logs',
     ChannelPrefix = '',
-    ChannelTopic = 'Automatisch aangemaakt door rs_discordlogs.',
+    ChannelTopic = 'Automatisch aangemaakt door de centrale FiveM logger.',
 
-    BotName = 'RS Discord Logs',
+    BotName = 'FiveM Logs',
     AvatarUrl = '',
 
+    -- Alleen een nood-fallback wanneer de bot/API route niet werkt.
     CentralWebhook = '',
     CentralWebhookConvar = 'rs_discordlogs_webhook',
 
-    -- Optioneel. Wordt alleen gebruikt wanneer MentionRoleOnError = true.
     AlertRoleId = '',
     MentionRoleOnError = false
 }
 
--- Houdt de Discord bot zichtbaar online via de Discord Gateway.
--- Dit gebruikt dezelfde bot-token als Config.Discord / rs_discordlogs_token.
+-- =========================================================
+-- BOT ONLINE STATUS
+-- =========================================================
 Config.Gateway = {
     Enabled = true,
-
-    -- Discord status: online, idle, dnd of invisible.
-    Status = 'online',
-
-    -- Discord activity types:
-    -- 0 = Playing, 2 = Listening, 3 = Watching, 5 = Competing.
-    ActivityType = 3,
+    Status = 'online', -- online, idle, dnd, invisible
+    ActivityType = 3,  -- 0 Playing, 2 Listening, 3 Watching, 5 Competing
     ActivityName = 'FiveM Logs',
-
-    -- Basispauze bij een verbroken Gateway-verbinding.
     ReconnectDelayMs = 5000,
-
-    -- Extra Gateway consolemeldingen.
     Debug = false
 }
 
+-- =========================================================
+-- ROUTING
+-- =========================================================
 Config.Routing = {
-    -- Ondersteunde routes: 'bot', 'resource_webhook', 'central_webhook'
-    -- De eerst werkende route wordt gebruikt.
+    -- Alles centraal: bot -> centrale webhook fallback.
+    -- Losse webhooks uit andere resources zijn standaard GEEN bestemming meer.
     Priority = {
         'bot',
-        'resource_webhook',
         'central_webhook'
     },
 
     AutoCreateChannels = true,
     UseResourceChannels = true,
 
-    -- Handmatige kanaalnamen per resource.
+    -- Alleen inschakelen wanneer je bewust oude resource-webhooks als extra
+    -- fallback wilt blijven gebruiken.
+    UseDetectedResourceWebhooks = false,
+
     ChannelOverrides = {
         -- ['ox_inventory'] = 'inventory-logs',
         -- ['es_extended'] = 'esx-logs'
     },
 
-    -- Handmatige webhooks per resource hebben voorrang op gescande webhooks.
+    -- Optioneel voor uitzonderingen. Normaal leeg laten.
     ResourceWebhooks = {
-        -- ['some-resource'] = 'https://discord.com/api/webhooks/...'
+        -- ['legacy-resource'] = 'https://discord.com/api/webhooks/...'
     }
 }
 
+-- =========================================================
+-- RESOURCE SCANNER
+-- =========================================================
+-- De scanner inventariseert resources en bestaande logging/webhooks.
+-- Hij verandert geen third-party bestanden en toont nooit volledige webhook-URL's.
 Config.Scanner = {
     Enabled = true,
     ScanOnStart = true,
     ScanOnResourceStart = true,
-
     DetectWebhookUrls = true,
     DetectLoggingExports = true,
-
-    -- Webhooks worden alleen in het servergeheugen bewaard en nooit volledig
-    -- naar de console geschreven.
     MaxFileBytes = 512000,
 
-    -- Bestanden die bij willekeurige resources vaak loggingconfig bevatten.
     CommonFiles = {
         'config.lua',
         'shared/config.lua',
@@ -100,7 +100,6 @@ Config.Scanner = {
         'shared.lua'
     },
 
-    -- Namen die als mogelijke logging-export worden gemarkeerd.
     KnownLogExports = {
         'Log',
         'Logger',
@@ -109,7 +108,8 @@ Config.Scanner = {
         'DiscordLog',
         'CreateLog',
         'WebhookLog',
-        'SendWebhook'
+        'SendWebhook',
+        'LegacyWebhook'
     },
 
     IgnoreResources = {
@@ -117,6 +117,36 @@ Config.Scanner = {
     }
 }
 
+-- =========================================================
+-- COMPATIBILITY
+-- =========================================================
+-- Geeft scripts meerdere algemene export/event-formaten zonder dat die scripts
+-- zelf Discord tokens/webhooks hoeven te kennen.
+Config.Compatibility = {
+    Enabled = true,
+    LocalEvents = true,
+    LegacyExports = true
+}
+
+-- =========================================================
+-- AUTOMATISCHE ADAPTERS
+-- =========================================================
+-- Deze adapters luisteren rechtstreeks naar ondersteunde resources, zodat je
+-- daar niets aan hun Discord-config hoeft te wijzigen.
+Config.Adapters = {
+    OxInventory = {
+        Enabled = true,
+        Transfers = true,   -- geven / tussen verschillende inventories
+        Purchases = true,
+        Crafting = true,
+        ItemUse = false,    -- kan veel logs geven
+        OpenInventory = false
+    }
+}
+
+-- =========================================================
+-- EMBEDS
+-- =========================================================
 Config.Embed = {
     DefaultColor = 3447003,
 
@@ -130,13 +160,16 @@ Config.Embed = {
         money = 15844367
     },
 
-    Footer = 'RS Discord Logs',
+    Footer = 'FiveM Logs',
     IncludeResource = true,
     IncludePlayerIdentifiers = true
 }
 
+-- =========================================================
+-- ALGEMENE SERVERLOGS
+-- =========================================================
 Config.AutomaticLogs = {
-    ResourceLifecycle = false,
-    PlayerConnecting = false,
-    PlayerDropped = false
+    ResourceLifecycle = false, -- zet aan als je iedere start/stop wilt loggen
+    PlayerConnecting = true,
+    PlayerDropped = true
 }
