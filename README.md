@@ -1,10 +1,10 @@
-# rs_discordlogs v3
+# rs_discordlogs v3.1
 
-`rs_discordlogs` is een universele centrale Discord logger voor FiveM. Vanaf v3 gebruikt iedere gelicentieerde installatie **de officiële centraal gehoste Rico Scripts Discord bot**.
+`rs_discordlogs` is een universele centrale Discord logger voor FiveM. Iedere gelicentieerde installatie gebruikt **de officiële centraal gehoste Rico Scripts Discord bot**.
 
-## Belangrijk verschil met v2
+## Architectuur
 
-De downloadbare FiveM resource bevat geen bot-token, webhook-token of Discord bot-login meer.
+De downloadbare FiveM resource bevat geen bot-token, webhook-token of Discord bot-login.
 
 ```text
 FiveM resource
@@ -18,7 +18,7 @@ Daardoor kan iemand die de resource downloadt jouw bot-token niet uitlezen of ov
 
 ## Klantinstallatie
 
-In `server.cfg` zijn nog maar drie waarden nodig:
+In `server.cfg` zijn drie waarden nodig:
 
 ```cfg
 set rs_discordlogs_api_url "https://JOUW-LOGGING-DOMEIN"
@@ -28,19 +28,17 @@ set rs_discordlogs_guild "DISCORD_SERVER_ID"
 ensure rs_discordlogs
 ```
 
-Er hoort **geen** `rs_discordlogs_token` meer op een klantserver te staan.
+Er hoort **geen** `rs_discordlogs_token` op een klantserver te staan.
 
 Start `rs_discordlogs` vóór resources die de bridge gebruiken.
 
 ## Officiële bot uitnodigen
 
-Voer in de FiveM serverconsole uit:
-
 ```text
 rslogs_invite
 ```
 
-De API geeft de invite van de officiële Rico Scripts logging bot terug, al ingevuld voor de geconfigureerde Discord guild.
+De API geeft de invite van de officiële Rico Scripts logging bot terug voor de ingestelde Discord guild.
 
 Daarna:
 
@@ -50,36 +48,47 @@ rslogs_status
 rslogs_test
 ```
 
-## Automatische categorieën
+## Categorieën automatisch op scriptmaker
 
-Categorieën worden door de centrale service beheerd, niet door klantresources. Standaard:
+Vanaf v3.1 gebruikt de bot **geen vaste RS/ESX/OX-prefixcategorieën meer**.
 
-```text
-RS Logs
-ESX Logs
-OX Logs
-Admin Logs
-Algemene Logs
-Overige Logs
+Bij iedere log leest de FiveM-resource de maker rechtstreeks uit de metadata van het `fxmanifest.lua`:
+
+```lua
+author 'Rico-Scripts'
 ```
 
-Voorbeelden:
+Die `author` wordt de Discord-categorie. Voor resources die geen `author` hebben worden ook `creator` en `developer` als fallback geprobeerd.
+
+Voorbeeld:
 
 ```text
-RS Logs
+Rico-Scripts
 ├── #rs-bikemechanic
 ├── #rs-phone
-└── #rs-garage
+├── #rs-garage
+└── #rs-duty
 
-OX Logs
+Overextended
 ├── #ox-inventory
-└── #ox-doorlock
+├── #ox-lib
+└── #ox-target
+
+jaksam1074
+└── #jobs-creator
+
+Onbekende Scripts
+└── #script-zonder-author
 
 Algemene Logs
 └── #connections
 ```
 
-Bestaande kanalen met dezelfde naam kunnen automatisch naar de correcte categorie worden verplaatst.
+Er worden bij het registreren **geen standaard scriptcategorieën vooraf aangemaakt**. Een makercategorie ontstaat pas wanneer voor het eerst een resource van die maker wordt gelogd of getest.
+
+Als een bestaand logkanaal nog onder een oude categorie staat, verplaatst de bot het automatisch naar de categorie van de gevonden maker.
+
+Oude lege categorieën zoals `RS Logs`, `ESX Logs` en `OX Logs` worden niet automatisch verwijderd; die kun je na de migratie handmatig verwijderen wanneer ze leeg zijn.
 
 ## Legacy webhook bridge
 
@@ -116,7 +125,7 @@ exports['rs_discordlogs']:Log({
 })
 ```
 
-De aanroepende resource wordt automatisch herkend.
+De aanroepende resource wordt automatisch herkend. De maker wordt vervolgens uit het `fxmanifest.lua` van die resource gehaald.
 
 Compatibility exports blijven beschikbaar:
 
@@ -139,7 +148,18 @@ rslogs_test_webhooks
 rslogs_test_resource <resource>
 ```
 
-`rslogs_test_webhooks` scant gestarte resources op webhookcode, webhook-URL's, loggingexports en de manifest-bridge. Voor iedere gevonden resource wordt via de hosted API en officiële bot een kanaal/testbericht aangemaakt.
+`rslogs_test_webhooks` scant gestarte resources op webhookcode, webhook-URL's, loggingexports en de manifest-bridge. Voor iedere gevonden resource:
+
+1. wordt de `fxmanifest` maker gelezen;
+2. wordt de makercategorie aangemaakt wanneer die ontbreekt;
+3. wordt het logkanaal aangemaakt of verplaatst;
+4. wordt een bevestigingsembed gestuurd.
+
+In de console zie je ook de maker:
+
+```text
+[OK] rs_phone -> maker=Rico-Scripts | hosted kanaal + bridge bevestigd via official_bot
+```
 
 ## Statuscommands
 
@@ -171,31 +191,26 @@ De bestaande adapter blijft werken voor onder andere:
 - aankopen;
 - crafting.
 
-Item use en open-inventory logs staan standaard uit vanwege spam.
+Omdat de maker uit het manifest wordt gelezen, komt `ox_inventory` automatisch onder de categorie die in zijn eigen `author` metadata staat.
 
 ## Server-side hosted service
 
-De officiële service staat in [`service/`](service/) en is bedoeld om op de Rico Scripts VPS te draaien. Zie `service/README.md` voor deployment, systemd, Nginx en licensebeheer.
+De officiële service staat in `service/` en is bedoeld om op de Rico Scripts VPS te draaien. Zie `service/README.md` voor deployment, systemd, Nginx en licensebeheer.
 
 De bot-token hoort uitsluitend in de VPS environment van die service te staan.
 
-## Migratie van v2 naar v3
+## Migratie vanaf v3.0
 
-Verwijder op klantservers:
+Na update naar v3.1:
 
-```cfg
-set rs_discordlogs_token "..."
-set rs_discordlogs_webhook "..."
+```text
+restart rs_discordlogs
+rslogs_scan
+rslogs_test_webhooks
 ```
 
-Gebruik in plaats daarvan:
-
-```cfg
-set rs_discordlogs_api_url "https://JOUW-LOGGING-DOMEIN"
-set rs_discordlogs_license "RSLOGS_..."
-set rs_discordlogs_guild "DISCORD_SERVER_ID"
-```
+Hiermee worden bestaande resourcekanalen naar hun nieuwe makercategorie verplaatst. Eventuele oude lege `RS Logs`, `ESX Logs`, `OX Logs` of `Overige Logs` categorieën kun je daarna verwijderen.
 
 ## Licentie
 
-Dit project is **niet meer MIT**. Het valt onder de `Rico Scripts Proprietary License v1.0` in [`LICENSE`](LICENSE). Herdistributie, resale, key sharing en het omzeilen van license/servicebeveiliging zijn zonder schriftelijke toestemming niet toegestaan.
+Dit project valt onder de `Rico Scripts Proprietary License v1.0` in `LICENSE`. Herdistributie, resale, key sharing en het omzeilen van license/servicebeveiliging zijn zonder schriftelijke toestemming niet toegestaan.
