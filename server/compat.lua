@@ -41,8 +41,6 @@ local function payloadFromArgs(...)
         return payload
     end
 
-    -- Universeel legacy formaat:
-    -- title, description, color, fields, playerSource, logType
     return {
         title = args[1] or 'FiveM log',
         description = args[2],
@@ -65,13 +63,62 @@ local function send(explicitResource, ...)
     return true
 end
 
--- Expliciete helper voor scripts die vroeger rechtstreeks een webhook stuurden.
+local function webhookEmbedToPayload(embed, content)
+    embed = type(embed) == 'table' and embed or {}
+
+    local description = embed.description
+    if (not description or description == '') and content and content ~= '' then
+        description = tostring(content)
+    elseif content and content ~= '' then
+        description = ('%s\n\n%s'):format(tostring(content), tostring(description))
+    end
+
+    return {
+        type = 'info',
+        title = embed.title or 'FiveM log',
+        description = description,
+        color = tonumber(embed.color),
+        fields = normalizeFields(embed.fields),
+        footer = embed.footer and embed.footer.text or nil,
+        thumbnail = embed.thumbnail and embed.thumbnail.url or nil,
+        image = embed.image and embed.image.url or nil
+    }
+end
+
 exports('LegacyWebhook', function(...)
     return send(nil, ...)
 end)
 
 exports('Webhook', function(...)
     return send(nil, ...)
+end)
+
+-- Gebruikt door @rs_discordlogs/server/intercept.lua. Een bestaand script mag
+-- zijn oude webhook-payload blijven bouwen; rs_discordlogs routeert hem daarna
+-- via de centrale bot naar het kanaal van de aanroepende resource.
+exports('ForwardWebhook', function(webhookPayload)
+    if type(webhookPayload) ~= 'table' then
+        return false
+    end
+
+    local resourceName = callingResource(nil)
+    local embeds = type(webhookPayload.embeds) == 'table' and webhookPayload.embeds or {}
+
+    if #embeds == 0 then
+        RSDiscordLogs.Send(resourceName, webhookEmbedToPayload({}, webhookPayload.content))
+        return true
+    end
+
+    local sent = 0
+    for index = 1, math.min(#embeds, 10) do
+        local embed = embeds[index]
+        if type(embed) == 'table' then
+            RSDiscordLogs.Send(resourceName, webhookEmbedToPayload(embed, index == 1 and webhookPayload.content or nil))
+            sent = sent + 1
+        end
+    end
+
+    return sent > 0
 end)
 
 if not Config.Compatibility or Config.Compatibility.LegacyExports ~= false then
@@ -105,7 +152,6 @@ exports('IsAvailable', function()
 end)
 
 if not Config.Compatibility or Config.Compatibility.LocalEvents ~= false then
-    -- Bewust alleen lokale server-events; geen RegisterNetEvent.
     AddEventHandler('discordlogs:log', function(payload, resourceName)
         send(resourceName, payload)
     end)
