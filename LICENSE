@@ -1,21 +1,98 @@
-MIT License
+RICO SCRIPTS PROPRIETARY LICENSE v1.0
+Copyright (c) 2026 Rico-Scripts. All rights reserved.
 
-Copyright (c) 2026 Rico-Scripts
+IMPORTANT: This software is licensed, not sold. By installing, copying, using,
+or accessing the Software or the related hosted logging service, you agree to
+these terms. If you do not agree, do not use the Software or service.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. DEFINITIONS
+"Software" means the rs_discordlogs FiveM resource, source code, scripts,
+documentation, updates, and related files supplied by Rico-Scripts.
+"Service" means the Rico Scripts hosted logging API and official Discord bot.
+"License Key" means a key issued by Rico-Scripts for an authorized installation.
+"Authorized Installation" means the FiveM server installation and Discord guild
+bound to a valid License Key.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. LIMITED LICENSE GRANT
+Subject to these terms and a valid License Key, Rico-Scripts grants you a
+limited, non-exclusive, non-transferable, non-sublicensable, revocable right to:
+(a) install and use the Software on the Authorized Installation;
+(b) modify configuration values and make internal modifications reasonably
+    necessary to operate the Software on that Authorized Installation; and
+(c) make reasonable private backup copies for disaster recovery.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+No ownership or intellectual-property rights are transferred to you.
+
+3. RESTRICTIONS
+You may not, without prior written permission from Rico-Scripts:
+(a) redistribute, publish, upload, mirror, leak, share, sell, rent, sublicense,
+    donate, or otherwise provide the Software or a modified version to another
+    person or organization;
+(b) resell or commercially redistribute the Software as your own product or as
+    part of another script/resource bundle;
+(c) share, sell, publish, or transfer a License Key;
+(d) remove or alter copyright, licensing, authorship, or proprietary notices;
+(e) bypass, disable, emulate, tamper with, or circumvent license validation,
+    installation binding, rate limits, access controls, or Service checks;
+(f) extract, obtain, disclose, reuse, or attempt to discover Discord bot tokens,
+    Service secrets, master credentials, private keys, or other protected
+    credentials used by Rico-Scripts;
+(g) use the official Rico Scripts Discord bot or Service for software other than
+    an Authorized Installation unless Rico-Scripts expressly permits it; or
+(h) use the Software or Service to violate law, Discord rules, Cfx.re/FiveM
+    rules, or the rights of another person.
+
+4. SOURCE MODIFICATIONS
+Where source code is provided, you may modify it only for your own Authorized
+Installation. A modified copy remains subject to this License and may not be
+redistributed. Configuration of the Software does not grant any right to host,
+clone, impersonate, or replace the official Rico Scripts Service or Discord bot.
+
+5. LICENSE AND INSTALLATION BINDING
+A License Key may be bound to a Discord guild and a FiveM installation. A key
+used outside its authorized binding may be rejected. Rico-Scripts may provide a
+rebind or transfer at its discretion or under the terms of the applicable sale.
+
+6. HOSTED SERVICE
+Access to the Service requires a valid License Key and may depend on the
+availability of third-party platforms, including Discord and Cfx.re/FiveM.
+Rico-Scripts may update, maintain, secure, rate-limit, suspend, or discontinue
+Service functionality when reasonably necessary for security, abuse prevention,
+maintenance, legal compliance, or product operation.
+
+7. UPDATES
+Updates, patches, or replacement versions provided by Rico-Scripts are covered
+by this License unless accompanied by different written terms.
+
+8. TERMINATION
+This License terminates automatically if you materially breach these terms.
+Upon termination you must stop using the Software and Service and delete all
+copies in your possession, except records you are legally required to retain.
+Rico-Scripts may disable a License Key associated with a material breach, fraud,
+unauthorized redistribution, credential abuse, or attempted circumvention.
+
+9. DISCLAIMER OF WARRANTY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE AND SERVICE ARE PROVIDED
+"AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT,
+OR UNINTERRUPTED AVAILABILITY.
+
+10. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, RICO-SCRIPTS SHALL NOT BE LIABLE FOR
+INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES,
+OR FOR LOSS OF DATA, PROFITS, REVENUE, GOODWILL, OR SERVER AVAILABILITY ARISING
+FROM USE OF OR INABILITY TO USE THE SOFTWARE OR SERVICE.
+
+11. SEVERABILITY
+If a provision of this License is held unenforceable, the remaining provisions
+remain in effect to the extent permitted by law.
+
+12. GOVERNING LAW
+Unless mandatory law requires otherwise, this License is governed by the laws
+of the Netherlands.
+
+13. PERMISSION AND CONTACT
+Any right not expressly granted is reserved by Rico-Scripts. Separate written
+permission is required for redistribution, sublicensing, resale, integration
+into a redistributed commercial package, or operation of a replacement hosted
+service for third parties.
